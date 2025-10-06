@@ -19,7 +19,6 @@ public class SimpleReplicationProtocol extends GenericProtocol {
 
     private Host mySelf;
 
-    //TODO change this to the ID of the BRB protocol
     private final short underlyingProtocolID = 1000;
 
     public SimpleReplicationProtocol() {
@@ -40,7 +39,6 @@ public class SimpleReplicationProtocol extends GenericProtocol {
     }
 
     //Nao sei se é suposto ser so isto, pelo enunciado parece que sim, mas por outro lado não parece ser assim tao simples.
-
     public void handleAppendRequest(AppendRequest request, short protoID) {
 
         sendRequest(request, underlyingProtocolID);
