@@ -1,9 +1,18 @@
 package byzantinereliablebroadcast;
 
+import byzantinereliablebroadcast.messages.BRBEchoMessage;
+import byzantinereliablebroadcast.messages.BRBReadyMessage;
+import byzantinereliablebroadcast.messages.BRBSendMessage;
+import membership.staticmembership.message.HelloMessage;
+import membership.staticmembership.message.HelloReplyMessage;
+import membership.staticmembership.message.ReplyMessage;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
+import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
+import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
 import pt.unl.fct.di.novasys.network.data.Host;
+import simplereplication.requests.AppendRequest;
 import utils.Crypto;
 
 import java.io.IOException;
@@ -94,11 +103,37 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         channelID = createChannel(TCPChannel.NAME, channelProps);
 
-        // proceder com a implementação (acho que o proximo passo é ja os handlers de notificaçoes e mensagens)
+
+        //Nao sei se esta correto
+        /*-------------------- Register Message Serializers ------------------------------- */
+        registerMessageSerializer(channelID, BRBSendMessage.MESSAGE_ID, BRBSendMessage.serializer);
+        registerMessageSerializer(channelID, BRBEchoMessage.MESSAGE_ID, BRBEchoMessage.serializer);
+        registerMessageSerializer(channelID, BRBReadyMessage.MESSAGE_ID, BRBReadyMessage.serializer);
+
+        /*-------------------- Register Message Handlers ------------------------------- */
+        registerMessageHandler(channelID, BRBSendMessage.MESSAGE_ID, this::uponRecieveSendMessage);
+        registerMessageHandler(channelID, BRBEchoMessage.MESSAGE_ID, this::uponRecieveEchoMessage);
+        registerMessageHandler(channelID, BRBReadyMessage.MESSAGE_ID, this::uponRecieveReadyMessage);
+
+        /*-------------------- Register Request Handlers ------------------------------- */
+        registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
 
+    }
 
+    private void handleAppendRequest(ProtoRequest protoRequest, short i) {
+        //TODO
+    }
 
+    private void uponRecieveReadyMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+        //TODO
+    }
 
+    private void uponRecieveEchoMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+        //TODO
+    }
+
+    private void uponRecieveSendMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+        //TODO
     }
 }

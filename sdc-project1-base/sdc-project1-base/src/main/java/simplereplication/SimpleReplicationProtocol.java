@@ -4,7 +4,7 @@ import common.events.ChannelAvailable;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.network.data.Host;
-import replication.notifications.DeliverEntryNotification;
+import byzantinereliablebroadcast.notifications.DeliverEntryNotification;
 import replication.requests.AppendRequest;
 import simplereplication.messages.AppendMessage;
 
@@ -33,8 +33,7 @@ public class SimpleReplicationProtocol extends GenericProtocol {
         //lidar com o request do DLogManager
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
-        //lidar com a notificação do BRB
-        //TODO mudar o subscribe para a notificação do BRB
+        //subscreve as notificações do BRB
         subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::handleDeliverNotification);
     }
 
@@ -42,8 +41,6 @@ public class SimpleReplicationProtocol extends GenericProtocol {
     public void handleAppendRequest(AppendRequest request, short protoID) {
 
         sendRequest(request, underlyingProtocolID);
-
-
 
     }
 
