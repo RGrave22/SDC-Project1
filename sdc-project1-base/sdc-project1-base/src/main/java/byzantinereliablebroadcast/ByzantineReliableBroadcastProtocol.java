@@ -119,21 +119,54 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
 
+        // Process neighbors and open connection to them (Copiado do staticmembership)
+        String[] neighborsCandidates = props.getProperty(PAR_NEIGHBORS).split(",");
+        for (int i = 0; i < neighborsCandidates.length; i++) {
+            hostElements = neighborsCandidates[i].split(":");
+            Host candidate = new Host(InetAddress.getByName(hostElements[0]), Short.parseShort(hostElements[1]));
+            if (!candidate.equals(myself)) {
+                this.candidates.add(candidate);
+            }
+        }
+
+        //copiado do staticmembership
+        for (Host h : this.candidates) {
+            //This is a simple hack to ensure that only the node with highest port starts establishing the protocol
+            if(h.getPort() < myself.getPort()) {
+                openConnection(h);
+            }
+        }
+
+        //copiado do static membership
+        try {
+            this.privateKey = Crypto.getPrivateKey(myIdentifier, props);
+            this.truststore = Crypto.getTruststore(props);
+            this.publicKey = this.truststore.getCertificate(myIdentifier).getPublicKey();
+        } catch (Exception e) {
+            System.err.println("Could not retrieve cryptographic material");
+            e.printStackTrace();
+            System.exit(1);
+        }
+
     }
 
-    private void handleAppendRequest(ProtoRequest protoRequest, short i) {
+    private void handleAppendRequest(ProtoRequest protoRequest, short protoId) {
+        AppendRequest req = (AppendRequest) protoRequest;
+
+        //String mid = generateUniqueID(req.getPayload());
+
         //TODO
     }
 
-    private void uponRecieveReadyMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+    private void uponRecieveReadyMessage(ProtoMessage protoMessage, Host host, short protoId, int channel) {
         //TODO
     }
 
-    private void uponRecieveEchoMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+    private void uponRecieveEchoMessage(ProtoMessage protoMessage, Host host, short protoId, int channel) {
         //TODO
     }
 
-    private void uponRecieveSendMessage(ProtoMessage protoMessage, Host host, short i, int i1) {
+    private void uponRecieveSendMessage(ProtoMessage protoMessage, Host host, short protoId, int channel) {
         //TODO
     }
 }
