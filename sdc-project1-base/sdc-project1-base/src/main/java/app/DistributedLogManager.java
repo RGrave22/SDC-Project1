@@ -35,8 +35,8 @@ import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionDown;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionFailed;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionUp;
 import pt.unl.fct.di.novasys.network.data.Host;
-import replication.notifications.DeliverEntryNotification;
-import replication.requests.AppendRequest;
+import simplereplication.notifications.DeliverEntryNotification;
+import simplereplication.requests.AppendRequest;
 
 public class DistributedLogManager extends GenericProtocol {
 

@@ -11,7 +11,7 @@ import java.util.UUID;
 
 public class AppendMessage extends SignedProtoMessage {
 
-    public final static short MESSAGE_ID = 501;
+    public final static short MESSAGE_ID = 902;
 
     private Host sender;
     private UUID messageID;

@@ -264,7 +264,7 @@ public class LogManagerClient {
 				registerChannelEventHandler(clientChannel[i], ServerUpEvent.EVENT_ID, this::uponServerUp);
 				registerChannelEventHandler(clientChannel[i], ServerFailedEvent.EVENT_ID, this::uponServerFailed);
 
-				//System.err.println("Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
+				System.err.println("Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
 				openConnection(servers[i], clientChannel[i]);
 			}
 
@@ -290,12 +290,13 @@ public class LogManagerClient {
 			
 			executeOperation();
 		}
-		
+
+        //ORIGINAL
 		public void executeOperation() {
-			//System.err.println(this.client_name + ": Generating new operation...");
+			System.err.println(this.client_name + ": Generating new operation...");
 
 			SignedProtoMessage request = null;
-			
+
 			if(r.nextFloat() <= LogManagerClient.probability_to_read) {
 				request = new ReadLogEntryRequest(client_name, this.lastEntryObserved >= 1 ? r.nextInt((int) this.lastEntryObserved) : 1);
 				currentRequest = ((ReadLogEntryRequest)request).getRequestID();
@@ -303,7 +304,7 @@ public class LogManagerClient {
 				 request = new AppendToLog(client_name, "Generated values: " + r.nextLong() + " :: " + r.nextLong() + " :: " + r.nextLong());
 				 currentRequest = ((AppendToLog)request).getRequestID();
 			}
-			
+
 			try {
 				request.signMessage(key);
 			} catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
@@ -312,13 +313,34 @@ public class LogManagerClient {
 				e.printStackTrace();
 				return;
 			}
-			
-			//System.err.println("Sending request of type " + request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " + myPrimaryChannel);
+
+			System.out.println("Sending request of type " + request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " + myPrimaryChannel);
 			sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
 			this.startExecution = System.currentTimeMillis();
-			
+
 			this.timeoutTimerID = setupTimer(new ExpiredOperation(currentRequest, request), operation_timeout);
 		}
+
+        //PARA TESTE
+//        public void executeOperation() {
+//            System.err.println(this.client_name + ": Generating single test operation...");
+//
+//            SignedProtoMessage request = new AppendToLog(client_name, "Test message from " + client_name);
+//            currentRequest = ((AppendToLog) request).getRequestID();
+//
+//            try {
+//                request.signMessage(key);
+//            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
+//                     | InvalidSerializerException e) {
+//                System.err.println(client_name + " (" + client_id + "): Unable to sign client request.");
+//                e.printStackTrace();
+//                return;
+//            }
+//
+//            System.out.println("Sending test request to " + myPrimaryServer + " on channel " + myPrimaryChannel);
+//            sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
+//            this.startExecution = System.currentTimeMillis();
+//        }
 		
 		private void clearTimeout() {
 			if(timeoutTimerID != -1) {
@@ -332,7 +354,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			System.out.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
@@ -342,14 +364,14 @@ public class LogManagerClient {
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+			System.out.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
 		
 		public void handleLogEntry(LogEntry msg, Host h, short protoId, int channel) {
 			clearTimeout();
 			
-			System.err.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
+			System.out.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
 			
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getIndex());
 		}

@@ -10,7 +10,7 @@ import replication.requests.AppendRequest;
 
 public class ReplicationProtocolPlaceholder extends GenericProtocol {
 
-	public final static short PROTO_ID = 900;
+	public final static short PROTO_ID = 1100;
 	public final static String PROTO_NAME = "FakeReplication";
 	
 	public ReplicationProtocolPlaceholder() {

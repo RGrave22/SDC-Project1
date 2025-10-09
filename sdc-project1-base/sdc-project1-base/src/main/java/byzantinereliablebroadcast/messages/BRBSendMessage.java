@@ -14,7 +14,7 @@ import utils.PublicKeyHelper;
 
 public class BRBSendMessage extends SignedProtoMessage {
 
-    public final static short MESSAGE_ID = 1001;
+    public final static short MESSAGE_ID = 1005;
 
     private final Host myself;
     private final String messageId;

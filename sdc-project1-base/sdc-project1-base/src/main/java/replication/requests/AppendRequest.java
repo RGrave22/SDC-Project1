@@ -16,7 +16,7 @@ import utils.SignaturesHelper;
 
 public class AppendRequest extends ProtoRequest {
 
-	public static final short REQUEST_ID = 901;
+	public static final short REQUEST_ID = 1102;
 	
 	private final UUID requestID;
 	private final String clientID;

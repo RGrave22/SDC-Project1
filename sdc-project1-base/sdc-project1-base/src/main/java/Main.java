@@ -10,12 +10,14 @@ import java.util.Properties;
 
 import app.DistributedLogManager;
 import broadcast.CrashFaultReliableBroadcastProtocol;
+import byzantinereliablebroadcast.ByzantineReliableBroadcastProtocol;
 import membership.staticmembership.StaticMembershipProtocol;
 import pt.unl.fct.di.novasys.babel.core.Babel;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.exceptions.InvalidParameterException;
 import pt.unl.fct.di.novasys.babel.exceptions.ProtocolAlreadyExistsException;
 import replication.ReplicationProtocolPlaceholder;
+import simplereplication.SimpleReplicationProtocol;
 
 public class Main {
 
@@ -40,23 +42,36 @@ public class Main {
 		Babel babel = Babel.getInstance();
 
 		DistributedLogManager dlm = new DistributedLogManager();
-		ReplicationProtocolPlaceholder rep = new ReplicationProtocolPlaceholder();
-		CrashFaultReliableBroadcastProtocol bcast = new CrashFaultReliableBroadcastProtocol();
+		//ReplicationProtocolPlaceholder rep = new ReplicationProtocolPlaceholder();
+		//CrashFaultReliableBroadcastProtocol bcast = new CrashFaultReliableBroadcastProtocol();
 		
 		//To simplify lets use this protocol again
-		StaticMembershipProtocol smp = new StaticMembershipProtocol();
-		
+		//StaticMembershipProtocol smp = new StaticMembershipProtocol();
+
+        //Os nossos protocolos
+        SimpleReplicationProtocol srp = new SimpleReplicationProtocol();
+        ByzantineReliableBroadcastProtocol brb = new ByzantineReliableBroadcastProtocol();
+
+
 		babel.registerProtocol(dlm);
-		babel.registerProtocol(rep);
-		babel.registerProtocol(bcast);
+		//babel.registerProtocol(rep);
+		//babel.registerProtocol(bcast);
+
+        //nossos
+        babel.registerProtocol(srp);
+        babel.registerProtocol(brb);
 		
-		babel.registerProtocol(smp);
+		//babel.registerProtocol(smp);
 
 		dlm.init(props);
-		rep.init(props);
-		bcast.init(props);
+//		rep.init(props);
+//		bcast.init(props);
 		
-		smp.init(props);
+		//smp.init(props);
+
+        //nossos
+        srp.init(props);
+        brb.init(props);
 
 		babel.start();
 		System.err.println("Babel has started...");

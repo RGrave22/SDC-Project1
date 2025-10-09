@@ -14,7 +14,7 @@ import utils.SignaturesHelper;
 
 public class DeliverEntryNotification extends ProtoNotification {
 
-	public static final short NOTIFICATION_ID = 901;
+	public static final short NOTIFICATION_ID = 1101;
 	
 	private final UUID requestID;
 	private final String clientID;
