@@ -19,6 +19,7 @@ import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import pt.unl.fct.di.novasys.babel.generic.signed.InvalidSerializerException;
 import pt.unl.fct.di.novasys.babel.handlers.MessageInHandler;
 import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
+import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
 import simplereplication.requests.AppendRequest;
 import utils.Crypto;
@@ -28,10 +29,7 @@ import java.net.InetAddress;
 import java.nio.channels.Channel;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Properties;
-import java.util.UUID;
+import java.util.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
@@ -127,6 +125,14 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         channelID = createChannel(TCPChannel.NAME, channelProps);
 
+        //teste
+        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
+        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
+        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
+        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.InConnectionUp.EVENT_ID, this::uponInConnectionUp);
+        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.InConnectionDown.EVENT_ID, this::uponInConnectionDown);
+
+
         //TODO perguntar se como se trata de BRB e nao Byzantine Consistent Broadcast se nao é preciso o ready
         //Nao sei se esta correto
         /*-------------------- Register Message Serializers ------------------------------- */
@@ -163,6 +169,17 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         pi = candidates.size() + 1;
 
 
+        //copiado do static membership
+        try {
+            this.privateKey = Crypto.getPrivateKey(myIdentifier, props);
+            this.truststore = Crypto.getTruststore(props);
+            this.publicKey = this.truststore.getCertificate(myIdentifier).getPublicKey();
+        } catch (Exception e) {
+            System.err.println("Could not retrieve cryptographic material");
+            e.printStackTrace();
+            System.exit(1);
+        }
+
 
         //copiado do staticmembership
         int i = 1;
@@ -176,16 +193,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             }
         }
 
-        //copiado do static membership
-        try {
-            this.privateKey = Crypto.getPrivateKey(myIdentifier, props);
-            this.truststore = Crypto.getTruststore(props);
-            this.publicKey = this.truststore.getCertificate(myIdentifier).getPublicKey();
-        } catch (Exception e) {
-            System.err.println("Could not retrieve cryptographic material");
-            e.printStackTrace();
-            System.exit(1);
-        }
+
 
         myIdentifier = props.getProperty(Crypto.CRYPTO_NAME_KEY);
         logger.info("Initializing BRB protocol for node {}", myIdentifier);
@@ -424,6 +432,57 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
 
         return hexString.toString();
+    }
+
+
+    //Teste
+    private void uponInConnectionUp(InConnectionUp event, int channelId) {
+//        logger.info("Host (in) {} is up", event.getNode());
+//        if (!this.neighbors.containsKey(event.getNode())) {
+//            this.candidates.remove(event.getNode());
+//            this.neighbors.put(event.getNode(), null);
+            openConnection(event.getNode());
+//        }
+    }
+
+    private void uponInConnectionDown(InConnectionDown event, int channelId) {
+        logger.info("Connection from host {} is down, cause: {}", event.getNode(), event.getCause());
+    }
+
+    private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
+//        logger.info("Host {} is down, cause: {}", event.getNode(), event.getCause());
+//        if (this.candidates.contains(event.getNode()))
+//            this.candidates.remove(event.getNode());
+//        else if (this.neighbors.containsKey(event.getNode())) {
+//            this.neighbors.remove(event.getNode());
+//        }
+    }
+
+    private void uponOutConnectionFailed(OutConnectionFailed<?> event, int channelId) {
+        logger.info("Connection to host {} failed, cause: {}", event.getNode(), event.getCause());
+//        this.candidates.remove(event.getNode());
+        this.candidates.remove(event.getNode());
+    }
+
+    private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
+        logger.info("Host (out) {} is up", event.getNode());
+//        if (this.candidates.remove(event.getNode())) {
+//            this.neighbors.put(event.getNode(), null);
+//            this.issuedChallenges.put(event.getNode(), new Random(System.currentTimeMillis()).nextLong());
+//
+//            logger.info("Sending a challenge to " + event.getNode() + ": " + this.issuedChallenges.get(event.getNode()));
+//
+//            HelloMessage hm = new HelloMessage(myself, publicKey, this.issuedChallenges.get(event.getNode()));
+//            try {
+//                hm.signMessage(privateKey);
+//                sendMessage(hm,event.getNode());
+//                logger.info("Out connection is up for " + event.getNode() + " sent challenge...");
+//            } catch (Exception e) {
+//                e.printStackTrace();
+//            }
+//        } else {
+//            logger.info("Out connection is up for " + event.getNode() + " but node is not part of candidates.");
+//        }
     }
 
 }
