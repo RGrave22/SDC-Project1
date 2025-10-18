@@ -1,13 +1,23 @@
 package PBFT;
 
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
+import java.security.SignatureException;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.Certificate;
+import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Properties;
 import java.util.Set;
 
 import PBFT.messages.CommitMessage;
@@ -15,17 +25,20 @@ import PBFT.messages.NewViewMessage;
 import PBFT.messages.PrePrepareMessage;
 import PBFT.messages.PrepareMessage;
 import PBFT.messages.ViewChangeMessage;
+import PBFT.notifications.DeliverEntryNotification;
 import PBFT.requests.AppendRequest;
-import SMR.SMReplicationProtocol;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.data.Host;
+import utils.Crypto;
 import utils.SignaturesHelper;
 
-public class PBFTAgreement {
+public class PBFTAgreement extends GenericProtocol {
 
-    private final GenericProtocol parent;
+    public static final short PROTO_ID = 1007;
+    public static final String PROTO_NAME = "PBFTAgreement";
+
     private final Map<Long, PBFTLogEntry> log = new HashMap<>();
 
     private static final long PRIMARY_TIMEOUT = 5000;
@@ -47,34 +60,57 @@ public class PBFTAgreement {
     private long currentView = 0;
 
     public PBFTAgreement(GenericProtocol parent) {
-        this.parent = parent;
+        super(PROTO_NAME, PROTO_ID);
     }
 
     private boolean amPrimary() {
         return primary.equals(self);
     }
 
-    public void init(List<Host> replicas, Host self, Host primary, PrivateKey privateKey,
-            Map<Host, PublicKey> publicKeys) throws HandlerRegistrationException {
+    @Override
+    public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-        this.replicas = replicas;
+        String me = (String) props.get("me");
+
+        PrivateKey privKey;
+        try {
+            privKey = Crypto.getPrivateKey(me, props);
+        } catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException e) {
+            throw new RuntimeException("Erro ao carregar chave privada da réplica " + me, e);
+        }
+
+        Map<Host, PublicKey> pubKeys = new HashMap<>();
+        try {
+            KeyStore truststore = Crypto.getTruststore(props);
+            for (Host h : replicas) {
+                Certificate cert = truststore.getCertificate(h.getAddress().toString());
+                if (cert != null) {
+                    publicKeys.put(h, cert.getPublicKey());
+                } else {
+                    throw new RuntimeException("Certificado não encontrado para " + h.getAddress().toString());
+                }
+            }
+        } catch (IOException | RuntimeException | KeyStoreException | NoSuchAlgorithmException | CertificateException e) {
+            throw new RuntimeException("Erro ao carregar chaves públicas dos replicas", e);
+        }
+
+        this.replicas = (List<Host>) props.get("replicas");
         this.f = (replicas.size() - 1) / 3;
-        this.self = self;
-        this.primary = primary;
-        this.privateKey = privateKey;
-        this.publicKeys = publicKeys;
+        this.self = (Host) props.get("self");
+        this.primary = (Host) props.get("primary");
+        this.publicKeys = pubKeys;
+        this.privateKey = privKey;
 
-        ((SMReplicationProtocol) parent).registerPBFTHandler(PrePrepareMessage.MESSAGE_ID,
+        registerMessageHandler(PROTO_ID, PrePrepareMessage.MESSAGE_ID,
                 (msg, from, srcProto, channel) -> onPrePrepare((PrePrepareMessage) msg, from));
-        ((SMReplicationProtocol) parent).registerPBFTHandler(PrepareMessage.MESSAGE_ID,
+        registerMessageHandler(PROTO_ID, PrepareMessage.MESSAGE_ID,
                 (msg, from, srcProto, channel) -> onPrepare((PrepareMessage) msg, from));
-        ((SMReplicationProtocol) parent).registerPBFTHandler(CommitMessage.MESSAGE_ID,
+        registerMessageHandler(PROTO_ID, CommitMessage.MESSAGE_ID,
                 (msg, from, srcProto, channel) -> onCommit((CommitMessage) msg, from));
-        ((SMReplicationProtocol) parent).registerPBFTHandler(ViewChangeMessage.MESSAGE_ID,
+        registerMessageHandler(PROTO_ID, ViewChangeMessage.MESSAGE_ID,
                 (msg, from, srcProto, channel) -> onViewChange((ViewChangeMessage) msg, from));
-        ((SMReplicationProtocol) parent).registerPBFTHandler(NewViewMessage.MESSAGE_ID,
+        registerMessageHandler(PROTO_ID, NewViewMessage.MESSAGE_ID,
                 (msg, from, srcProto, channel) -> onNewView((NewViewMessage) msg, from));
-
     }
 
     public void propose(AppendRequest req) {
@@ -94,7 +130,7 @@ public class PBFTAgreement {
     private void broadcast(ProtoMessage msg) {
         for (Host h : replicas) {
             if (!h.equals(self)) {
-                ((SMReplicationProtocol) parent).sendToReplica(msg, h);
+                sendMessage(msg, h);
             }
         }
     }
@@ -139,7 +175,14 @@ public class PBFTAgreement {
         entry.addCommit(from);
         if (entry.getCommitsCount() >= 2 * f + 1 && !entry.isDelivered()) {
             entry.markDelivered();
-            ((SMReplicationProtocol) parent).deliverEntry(entry.getRequest(), entry.getSeq());
+            AppendRequest req = entry.getRequest();
+            triggerNotification(new DeliverEntryNotification(
+                    req.getRequestID(),
+                    req.getClientID(),
+                    req.getClientRequest(),
+                    req.getServerSignature(),
+                    entry.getSeq()
+            ));
         }
     }
 
@@ -147,10 +190,11 @@ public class PBFTAgreement {
 
         try {
             PublicKey pub = publicKeys.get(from);
-            if (pub == null || !SignaturesHelper.checkSignature(longToBytes(msg.getNovaView()), msg.getSign(), pub)) {
+            byte[] data = ViewChangeMessage.getBytesForSigning(msg);
+            if (pub == null || !SignaturesHelper.checkSignature(data, msg.getSign(), pub)) {
                 return;
             }
-        } catch (Exception e) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
             return;
         }
 
@@ -180,23 +224,56 @@ public class PBFTAgreement {
         }
     }
 
+    private void startViewChange(long v) {
+
+        List<PrePrepareMessage> prePrePare = collectPendingPrePrepares(v);
+        List<CommitMessage> commits = collectCommits(v);
+
+        byte[] sign = null;
+
+        ViewChangeMessage vcm = new ViewChangeMessage(v, self, sign, commits, prePrePare);
+
+        try {
+            byte[] data = ViewChangeMessage.getBytesForSigning(vcm);
+            sign = SignaturesHelper.generateSignature(data, privateKey);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
+            throw new RuntimeException("Erro ao assinar a mensagem", e);
+        }
+
+        vcm.setSign(sign);
+
+        broadcast(vcm);
+
+        if (amPrimary()) {
+            long maxSeq = log.keySet().stream().mapToLong(Long::longValue).max().orElse(seqNo);
+            seqNo = maxSeq;
+            for (PBFTLogEntry entry : log.values()) {
+                if (!entry.isDelivered()) {
+                    propose(entry.getRequest());
+                }
+            }
+        }
+    }
+
     private void startNewView(long v) {
 
         List<ViewChangeMessage> vChanges = receivedViewChanges.get(v);
         List<PrePrepareMessage> prePrepares = collectPendingPrePrepares(v);
 
-        byte[] payload = computeNewViewDigest(v, vChanges, prePrepares);
-
         byte[] sign = null;
+
+        NewViewMessage nvm = new NewViewMessage(v, vChanges, prePrepares, sign);
+
         try {
-            sign = SignaturesHelper.generateSignature(payload, privateKey);
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao assinar a mensagem", e);
+            byte[] data = NewViewMessage.getBytesForSigning(nvm);
+            sign = SignaturesHelper.generateSignature(data, privateKey);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
+            throw new RuntimeException("Erro ao assinar a mensagem new view message", e);
         }
 
-        NewViewMessage newViewMsg = new NewViewMessage(v, vChanges, prePrepares, sign);
+        nvm.setSign(sign);
 
-        broadcast(newViewMsg);
+        broadcast(nvm);
 
         if (amPrimary()) {
             for (PBFTLogEntry entry : log.values()) {
@@ -210,14 +287,13 @@ public class PBFTAgreement {
 
     public void onNewView(NewViewMessage msg, Host from) {
 
-        try {
+         try {
             PublicKey pub = publicKeys.get(from);
-            if (pub == null || !SignaturesHelper.checkSignature(
-                    computeNewViewDigest(msg.getNovaView(), msg.getViewChanges(), msg.getPrePreparedChanges()),
-                    msg.getSign(), pub)) {
+            byte[] data = NewViewMessage.getBytesForSigning(msg);
+            if (pub == null || !SignaturesHelper.checkSignature(data, msg.getSign(), pub)) {
                 return;
             }
-        } catch (Exception e) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
             return;
         }
 
@@ -238,34 +314,6 @@ public class PBFTAgreement {
         }
     }
 
-    private void startViewChange(long v) {
-
-        currentView = v;
-        primary = replicas.get((int) (currentView % replicas.size()));
-
-        byte[] payload = longToBytes(v);
-        byte[] sign = null;
-        try {
-            sign = SignaturesHelper.generateSignature(payload, privateKey);
-        } catch (Exception e) {
-            throw new RuntimeException("Erro ao assinar a mensagem", e);
-        }
-
-        ViewChangeMessage vcm = new ViewChangeMessage(v, self, sign);
-
-        broadcast(vcm);
-
-        if (amPrimary()) {
-            long maxSeq = log.keySet().stream().mapToLong(Long::longValue).max().orElse(seqNo);
-            seqNo = maxSeq;
-            for (PBFTLogEntry entry : log.values()) {
-                if (!entry.isDelivered()) {
-                    propose(entry.getRequest());
-                }
-            }
-        }
-    }
-
     public void onMessageFromPrimary() {
         lastPrimaryResponseTime = System.currentTimeMillis();
     }
@@ -276,55 +324,28 @@ public class PBFTAgreement {
         }
     }
 
-    private byte[] computeNewViewDigest(long v, List<ViewChangeMessage> vChanges, List<PrePrepareMessage> prePrepares) {
-        List<byte[]> parts = new ArrayList<>();
-        parts.add(longToBytes(v));
-        for (ViewChangeMessage vc : vChanges) {
-            if (vc.getSign() != null) {
-                parts.add(vc.getSign());
-            }
-        }
-        for (PrePrepareMessage ppm : prePrepares) {
-            parts.add(ppm.getDigest());
-        }
-        return SignaturesHelper.digest(concat(parts));
-    }
-
-    private byte[] longToBytes(long x) {
-        return new byte[] {
-                (byte) (x >> 56),
-                (byte) (x >> 48),
-                (byte) (x >> 40),
-                (byte) (x >> 32),
-                (byte) (x >> 24),
-                (byte) (x >> 16),
-                (byte) (x >> 8),
-                (byte) (x)
-        };
-    }
-
-    private byte[] concat(List<byte[]> arrays) {
-        int totalLength = arrays.stream().mapToInt(a -> a.length).sum();
-        byte[] result = new byte[totalLength];
-        int pos = 0;
-        for (byte[] a : arrays) {
-            System.arraycopy(a, 0, result, pos, a.length);
-            pos += a.length;
-        }
-        return result;
-    }
-
     private List<PrePrepareMessage> collectPendingPrePrepares(long newView) {
         List<PrePrepareMessage> pending = new ArrayList<>();
         for (PBFTLogEntry e : log.values()) {
             if (!e.isDelivered() && e.getView() <= newView) {
-                // cria um PrePrepare a partir do entry
                 PrePrepareMessage ppm = new PrePrepareMessage(self, e.getView(), e.getSeq(), e.getDigest(),
                         e.getRequest());
                 pending.add(ppm);
             }
         }
         return pending;
+    }
+
+    private List<CommitMessage> collectCommits(long newView) {
+        List<CommitMessage> done = new ArrayList<>();
+        for (PBFTLogEntry e : log.values()) {
+            if (e.isDelivered() && e.getView() <= newView) {
+                CommitMessage cm = new CommitMessage(e.getView(), e.getSeq(), e.getDigest(),
+                        self);
+                done.add(cm);
+            }
+        }
+        return done;
     }
 
 }

@@ -1,5 +1,7 @@
 package PBFT.messages;
 
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +17,7 @@ public class NewViewMessage extends SignedProtoMessage {
     private final long novaView;
     private final List<ViewChangeMessage> viewChanges;
     private final List<PrePrepareMessage> prePreparedChanges;
-    private final byte[] sign;
+    private byte[] sign;
 
     public NewViewMessage(long view, List<ViewChangeMessage> viewChanges, List<PrePrepareMessage> prePreparedChanges, byte[] sign) {
         super(MESSAGE_ID);
@@ -31,6 +33,10 @@ public class NewViewMessage extends SignedProtoMessage {
 
     public byte[] getSign() {
         return sign;
+    }
+
+    public void setSign(byte[] signature) {
+        this.sign = signature;
     }
 
     public List<ViewChangeMessage> getViewChanges() {
@@ -99,4 +105,40 @@ public class NewViewMessage extends SignedProtoMessage {
     public SignedMessageSerializer<? extends SignedProtoMessage> getSerializer() {
         return NewViewMessage.serializer;
     }
+
+    public static byte[] getBytesForSigning(NewViewMessage msg) {
+        ByteArrayOutputStream bos = new ByteArrayOutputStream();
+        DataOutputStream dos = new DataOutputStream(bos);
+
+        try {
+
+            dos.writeLong(msg.getNovaView());
+
+            if (msg.getViewChanges() != null) {
+                dos.writeInt(msg.getViewChanges().size());
+                for (ViewChangeMessage vcm : msg.getViewChanges()) {
+                    dos.write(ViewChangeMessage.getBytesForSigning(vcm));
+                }
+            } else {
+                dos.writeInt(0);
+            }
+
+            if (msg.getPrePreparedChanges() != null) {
+                dos.writeInt(msg.getPrePreparedChanges().size());
+                for (PrePrepareMessage ppm : msg.getPrePreparedChanges()) {
+                    dos.write(ppm.getDigest());
+                }
+            } else {
+                dos.writeInt(0);
+            }
+
+            dos.flush();
+
+        } catch (IOException e) {
+            throw new RuntimeException("Erro ao gerar assinatura para new view message.");
+        }
+
+        return bos.toByteArray();
+    }
+
 }
