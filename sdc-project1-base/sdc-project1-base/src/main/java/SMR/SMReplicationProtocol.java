@@ -2,13 +2,16 @@ package SMR;
 
 import java.io.IOException;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.TreeMap;
+import java.util.UUID;
 
 import PBFT.PBFTAgreement;
 import PBFT.notifications.DeliverEntryNotification;
+import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
 import SMR.timers.ViewChangeTimer;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
@@ -20,10 +23,13 @@ public class SMReplicationProtocol extends GenericProtocol {
     public static final String PROTO_NAME = "SMReplication";
 
     private PBFTAgreement agreement;
-    private final Map<Long, AppendRequest> log = new TreeMap<>();
+    private final Map<Long, AppendRequest> log;
+    private final Map<UUID, AppendRequest> pendingRequests;
 
     public SMReplicationProtocol() {
         super(PROTO_NAME, PROTO_ID);
+        this.log = new TreeMap<>();
+        this.pendingRequests = new HashMap<>();
     }
 
     @Override
@@ -35,6 +41,8 @@ public class SMReplicationProtocol extends GenericProtocol {
 
         subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::onDeliverEntry);
 
+        subscribeNotification(NewViewNotification.NOTIFICATION_ID, this::onNewView);
+
         setupPeriodicTimer(new ViewChangeTimer(), 3000, 3000);
 
         registerTimerHandler(ViewChangeTimer.TIMER_ID, (ViewChangeTimer t) -> {
@@ -44,6 +52,7 @@ public class SMReplicationProtocol extends GenericProtocol {
     }
 
     private void onAppend(AppendRequest req, short fromProto) {
+        pendingRequests.put(req.getRequestID(), req);
         agreement.propose(req);
     }
 
@@ -53,10 +62,15 @@ public class SMReplicationProtocol extends GenericProtocol {
 
         log.put(notification.getSeqNo(), req);
 
+        pendingRequests.remove(req.getRequestID());
+
     }
 
     public List<AppendRequest> getStateMachineLog() {
         return new ArrayList<>(log.values());
+    }
+
+    private void onNewView(NewViewNotification notification, short sourceProto) {
     }
 
 }

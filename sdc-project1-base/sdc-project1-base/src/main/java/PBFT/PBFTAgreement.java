@@ -21,6 +21,7 @@ import PBFT.messages.PrePrepareMessage;
 import PBFT.messages.PrepareMessage;
 import PBFT.messages.ViewChangeMessage;
 import PBFT.notifications.DeliverEntryNotification;
+import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
 import common.events.ChannelAvailable;
 import common.events.NeighborDown;
@@ -128,12 +129,14 @@ public class PBFTAgreement extends GenericProtocol {
 
     public void uponNeighborDownNotification(NeighborDown notification, short sourceProtoID) {
         this.neighbors.remove(notification.getNeighbor());
-        publicKeys.remove(notification.getNeighbor());
+        this.publicKeys.remove(notification.getNeighbor());
         f = Math.max((neighbors.size() - 1) / 3, 1);
     }
 
     public void handleRequest(AppendRequest req, short sourceProto) {
-        propose(req);
+        if (amPrimary()) {
+            propose(req);
+        }
     }
 
     public void propose(AppendRequest req) {
@@ -297,6 +300,8 @@ public class PBFTAgreement extends GenericProtocol {
         nvm.setSign(sign);
 
         broadcast(nvm);
+
+        triggerNotification(new NewViewNotification(v));
 
         if (amPrimary()) {
             for (PBFTLogEntry entry : log.values()) {
