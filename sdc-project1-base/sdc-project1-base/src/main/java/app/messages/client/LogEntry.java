@@ -1,6 +1,7 @@
 package app.messages.client;
 
 import java.io.IOException;
+
 import io.netty.buffer.ByteBuf;
 import pt.unl.fct.di.novasys.babel.generic.signed.SignedMessageSerializer;
 import pt.unl.fct.di.novasys.babel.generic.signed.SignedProtoMessage;

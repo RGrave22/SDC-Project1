@@ -16,6 +16,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
+import PBFT.notifications.DeliverEntryNotification;
+import PBFT.requests.AppendRequest;
 import app.messages.client.AppendToLog;
 import app.messages.client.AppendToLogReply;
 import app.messages.client.LogEntry;
@@ -35,210 +37,223 @@ import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionDown;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionFailed;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionUp;
 import pt.unl.fct.di.novasys.network.data.Host;
-import replication.notifications.DeliverEntryNotification;
-import replication.requests.AppendRequest;
 
 public class DistributedLogManager extends GenericProtocol {
 
-	private static final Logger logger = LogManager.getLogger(DistributedLogManager.class);
+    private static final Logger logger = LogManager.getLogger(DistributedLogManager.class);
 
-	public static final String BASE_LOG_NAME = "DistributedLogManager-XXX.log";
+    public static final String BASE_LOG_NAME = "DistributedLogManager-XXX.log";
 
-	public static final String ADDRESS_KEY = "address";
-	public static final String SERVER_PORT_KEY = "server_port";
+    public static final String ADDRESS_KEY = "address";
+    public static final String SERVER_PORT_KEY = "server_port";
 
-	public final static String PROTO_NAME = "DistributedLogManager";
-	public final static short PROTO_ID = 500;
+    public final static String PROTO_NAME = "DistributedLogManager";
+    public final static short PROTO_ID = 500;
 
-	private int clientChannel;
+    private int clientChannel;
 
-	private final Map<Host, Short> subscriptions;
-	private final Map<UUID, Pair<Host, Short>> pendingAppendRequests;
-	private final Map<Long, List<Pair<Host, Short>>> pendingReadRequest;
+    private final Map<Host, Short> subscriptions;
+    private final Map<UUID, Pair<Host, Short>> pendingAppendRequests;
+    private final Map<Long, List<Pair<Host, Short>>> pendingReadRequest;
 
-	private long nextEntryIndex;
-	private HashMap<Long, String> logEntries;
+    private long nextEntryIndex;
+    private HashMap<Long, String> logEntries;
 
-	// Change this if required
-	private final short underlyingProtocolID = 900;
+    // Change this if required
+    private final short underlyingProtocolID = 1000;
 
-	// Crypto info
-	private Host myself;
-	private PrivateKey privateKey;
-	private PublicKey publicKey;
+    // Crypto info
+    private Host myself;
+    private PrivateKey privateKey;
+    private PublicKey publicKey;
 
-	private final HashMap<Host, PublicKey> publicKeys;
+    private final HashMap<Host, PublicKey> publicKeys;
 
-	public DistributedLogManager()
-			throws IOException, ProtocolAlreadyExistsException, HandlerRegistrationException, GeneralSecurityException {
+    public DistributedLogManager()
+            throws IOException, ProtocolAlreadyExistsException, HandlerRegistrationException, GeneralSecurityException {
 
-		super(DistributedLogManager.PROTO_NAME, DistributedLogManager.PROTO_ID);
+        super(DistributedLogManager.PROTO_NAME, DistributedLogManager.PROTO_ID);
 
-		this.subscriptions = new HashMap<Host, Short>();
-		this.pendingAppendRequests = new HashMap<UUID, Pair<Host, Short>>();
-		this.pendingReadRequest = new HashMap<Long, List<Pair<Host, Short>>>();
+        this.subscriptions = new HashMap<>();
+        this.pendingAppendRequests = new HashMap<>();
+        this.pendingReadRequest = new HashMap<>();
 
-		this.nextEntryIndex = 0;
-		this.logEntries = new HashMap<Long, String>();
+        this.nextEntryIndex = 0;
+        this.logEntries = new HashMap<>();
 
-		this.publicKeys = new HashMap<Host, PublicKey>();
-	}
+        this.publicKeys = new HashMap<>();
+    }
 
-	@Override
-	public void init(Properties props) throws HandlerRegistrationException, IOException {
-		
-		if(!props.containsKey(SERVER_PORT_KEY)) {
-			System.err.println("The configuration named '" + SERVER_PORT_KEY + "' is mandatory for the operation of the system.");
-			System.exit(1);
-		}
-		
-		
-		Properties serverProps = new Properties();
-		serverProps.put(SimpleServerChannel.ADDRESS_KEY, props.getProperty(ADDRESS_KEY));
-		serverProps.setProperty(SimpleServerChannel.PORT_KEY, props.getProperty(SERVER_PORT_KEY));
+    @Override
+    public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-		clientChannel = createChannel(SimpleServerChannel.NAME, serverProps);
+        if (!props.containsKey(SERVER_PORT_KEY)) {
+            System.err.println("The configuration named '" + SERVER_PORT_KEY + "' is mandatory for the operation of the system.");
+            System.exit(1);
+        }
 
-		registerMessageSerializer(clientChannel, AppendToLog.MESSAGE_ID, AppendToLog.serializer);
-		registerMessageSerializer(clientChannel, ReadLogEntryRequest.MESSAGE_ID, ReadLogEntryRequest.serializer);
-		registerMessageSerializer(clientChannel, SubscribeToLog.MESSAGE_ID, SubscribeToLog.serializer);
-		registerMessageSerializer(clientChannel, AppendToLogReply.MESSAGE_ID, AppendToLogReply.serializer);
-		registerMessageSerializer(clientChannel, ReadLogEntryReply.MESSAGE_ID, ReadLogEntryReply.serializer);
-		registerMessageSerializer(clientChannel, LogEntry.MESSAGE_ID, LogEntry.serializer);
+        Properties serverProps = new Properties();
+        serverProps.put(SimpleServerChannel.ADDRESS_KEY, props.getProperty(ADDRESS_KEY));
+        serverProps.setProperty(SimpleServerChannel.PORT_KEY, props.getProperty(SERVER_PORT_KEY));
 
-		registerMessageHandler(clientChannel, AppendToLog.MESSAGE_ID, this::handleAppendToLogMessage);
-		registerMessageHandler(clientChannel, ReadLogEntryRequest.MESSAGE_ID, this::handleReadLogEntryRequestMessage);
-		registerMessageHandler(clientChannel, SubscribeToLog.MESSAGE_ID, this::handleSubscribeToLogMessage);
+        clientChannel = createChannel(SimpleServerChannel.NAME, serverProps);
 
-		registerChannelEventHandler(clientChannel, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
-		registerChannelEventHandler(clientChannel, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
-		registerChannelEventHandler(clientChannel, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
-		registerChannelEventHandler(clientChannel, OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
-		registerChannelEventHandler(clientChannel, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
+        registerMessageSerializer(clientChannel, AppendToLog.MESSAGE_ID, AppendToLog.serializer);
+        registerMessageSerializer(clientChannel, ReadLogEntryRequest.MESSAGE_ID, ReadLogEntryRequest.serializer);
+        registerMessageSerializer(clientChannel, SubscribeToLog.MESSAGE_ID, SubscribeToLog.serializer);
+        registerMessageSerializer(clientChannel, AppendToLogReply.MESSAGE_ID, AppendToLogReply.serializer);
+        registerMessageSerializer(clientChannel, ReadLogEntryReply.MESSAGE_ID, ReadLogEntryReply.serializer);
+        registerMessageSerializer(clientChannel, LogEntry.MESSAGE_ID, LogEntry.serializer);
 
-		subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::handleDeliverEntryNotification);
-		subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
-		subscribeNotification(NeighborUp.NOTIFICATION_ID, this::handleNeighborUpNotification);
-	}
+        registerMessageHandler(clientChannel, AppendToLog.MESSAGE_ID, this::handleAppendToLogMessage);
+        registerMessageHandler(clientChannel, ReadLogEntryRequest.MESSAGE_ID, this::handleReadLogEntryRequestMessage);
+        registerMessageHandler(clientChannel, SubscribeToLog.MESSAGE_ID, this::handleSubscribeToLogMessage);
 
-	public void handleChannelAvailableNotification(ChannelAvailable not, short sourceProto) {
-		this.myself = not.getMyHost();
-		this.privateKey = not.getMyPrivateKey();
-		this.publicKey = not.getMyPublicKey();
+        registerChannelEventHandler(clientChannel, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
+        registerChannelEventHandler(clientChannel, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
+        registerChannelEventHandler(clientChannel, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
+        registerChannelEventHandler(clientChannel, OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
+        registerChannelEventHandler(clientChannel, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
 
-		this.publicKeys.put(myself, publicKey);
-	}
+        subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::handleDeliverEntryNotification);
+        subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
+        subscribeNotification(NeighborUp.NOTIFICATION_ID, this::handleNeighborUpNotification);
+    }
 
-	public void handleNeighborUpNotification(NeighborUp not, short protoSource) {
-		this.publicKeys.put(not.getNeighbor(), not.getPublicKey());
-	}
+    public void handleChannelAvailableNotification(ChannelAvailable not, short sourceProto) {
+        this.myself = not.getMyHost();
+        this.privateKey = not.getMyPrivateKey();
+        this.publicKey = not.getMyPublicKey();
 
-	public void handleAppendToLogMessage(AppendToLog msg, Host from, short sourceProto, int channelID) {
-		try {
-			AppendRequest req = new AppendRequest(msg.getClientID(), myself, msg.serializeRequest());
-			req.sign(privateKey);
+        this.publicKeys.put(myself, publicKey);
+    }
 
-			pendingAppendRequests.put(req.getRequestID(), Pair.of(from, sourceProto));
+    public void handleNeighborUpNotification(NeighborUp not, short protoSource) {
+        this.publicKeys.put(not.getNeighbor(), not.getPublicKey());
+    }
 
-			sendRequest(req, underlyingProtocolID);
+    public void handleAppendToLogMessage(AppendToLog msg, Host from, short sourceProto, int channelID) {
+        try {
 
-		} catch (Exception e) {
-			logger.error("Could not process client AppendToLogRequest", e);
-		}
-	}
+            AppendRequest req = new AppendRequest(msg.getClientID(), myself, msg.serializeRequest(), 0);
+            req.sign(privateKey);
 
-	private void writeToLogAndFlush(long index, String logEntry) {
-		this.logEntries.put(index, logEntry);
-		logger.info("[[ " + index + " ]] " + logEntry );
-	}
-	
-	public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
-		try {
-			AppendToLog originalRequest = AppendToLog.deserializeRequest(not.getClientRequest());
+            pendingAppendRequests.put(req.getRequestID(), Pair.of(from, sourceProto));
 
-			writeToLogAndFlush(nextEntryIndex, originalRequest.generateFullLogEntry());
-			
-			Pair<Host, Short> info = pendingAppendRequests.remove(not.getRequestID());
+            sendRequest(req, underlyingProtocolID);
 
-			AppendToLogReply reply = new AppendToLogReply(originalRequest.getClientID(), nextEntryIndex);
+        } catch (Exception e) {
+            logger.error("Could not process client AppendToLogRequest", e);
+        }
+    }
 
-			sendMessage(clientChannel, reply, info.getRight(), info.getLeft(), 0);
+    private void writeToLogAndFlush(long index, String logEntry) {
+        this.logEntries.put(index, logEntry);
+        logger.info("[[ " + index + " ]] " + logEntry);
+    }
 
-			if (subscriptions.size() > 0) {
+    public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
+        try {
+            AppendToLog originalRequest = AppendToLog.deserializeRequest(not.getClientRequest());
 
-				LogEntry le = new LogEntry(nextEntryIndex, this.logEntries.get(nextEntryIndex));
-				le.signMessage(privateKey);
+            long index = not.getSeqNo();
 
-				for (Entry<Host, Short> sub : subscriptions.entrySet()) {
-				}
+            if (index != nextEntryIndex) {
+                logger.warn("Log inconsistente! PBFT seqNo={}, nextEntryIndex={}", index, nextEntryIndex);
+            }
 
-			}
+            writeToLogAndFlush(index, originalRequest.generateFullLogEntry());
 
-			List<Pair<Host, Short>> pending = pendingReadRequest.remove(nextEntryIndex);
+            Pair<Host, Short> info = pendingAppendRequests.remove(not.getRequestID());
 
-			if (pending != null) {
+            if (info != null) {
 
-				ReadLogEntryReply readReply = new ReadLogEntryReply(nextEntryIndex,
-						this.logEntries.get(nextEntryIndex));
-				readReply.signMessage(privateKey);
+                AppendToLogReply reply = new AppendToLogReply(originalRequest.getClientID(), index);
+                sendMessage(clientChannel, reply, info.getRight(), info.getLeft(), 0);
 
-				for (Pair<Host, Short> p : pending) {
-					sendMessage(clientChannel, readReply, p.getRight(), p.getLeft(), 0);
-				}
-			}
+            }
 
-			this.nextEntryIndex++;
-		} catch (Exception e) {
-			logger.error("Could not process a DeliverEntry notification", e);
-		}
-	}
+            if (!subscriptions.isEmpty()) {
 
-	public void handleReadLogEntryRequestMessage(ReadLogEntryRequest msg, Host from, short sourceProto, int channelID) {
-		try {
-			if (this.logEntries.containsKey(msg.getEntryLogIndex())) {
+                LogEntry le = new LogEntry(index, this.logEntries.get(index));
+                le.signMessage(privateKey);
 
-				ReadLogEntryReply readReply = new ReadLogEntryReply(msg.getEntryLogIndex(),
-						this.logEntries.get(msg.getEntryLogIndex()));
-				readReply.signMessage(privateKey);
+                for (Entry<Host, Short> sub : subscriptions.entrySet()) {
+                    sendMessage(clientChannel, le, sub.getValue(), sub.getKey(), 0);
+                }
 
-				sendMessage(clientChannel, readReply, sourceProto, from, 0);
+            }
 
-			} else {
-				// Store to reply at a latter date
-				List<Pair<Host, Short>> pending = this.pendingReadRequest.get(msg.getEntryLogIndex());
-				if (pending == null) {
-					pending = new ArrayList<Pair<Host, Short>>();
-					this.pendingReadRequest.put(msg.getEntryLogIndex(), pending);
-				}
+            List<Pair<Host, Short>> pending = pendingReadRequest.remove(index);
 
-				pending.add(Pair.of(from, sourceProto));
-			}
-		} catch (Exception e) {
-			logger.error("Could not process a DeliverEntry notification", e);
-		}
-	}
+            if (pending != null) {
 
-	public void handleSubscribeToLogMessage(SubscribeToLog msg, Host from, short sourceProto, int channelID) {
-		this.subscriptions.put(from, sourceProto);
-	}
+                ReadLogEntryReply readReply = new ReadLogEntryReply(index,
+                        this.logEntries.get(index));
+                readReply.signMessage(privateKey);
 
-	private void uponOutConnectionUp(OutConnectionUp event, int channel) {
-		logger.info(event);
-	}
+                for (Pair<Host, Short> p : pending) {
+                    sendMessage(clientChannel, readReply, p.getRight(), p.getLeft(), 0);
+                }
+            }
 
-	private void uponOutConnectionDown(OutConnectionDown event, int channel) {
-		logger.warn(event);
-	}
+            if (index >= nextEntryIndex) {
+                nextEntryIndex = index + 1;
+            }
 
-	private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> ev, int ch) {
-		logger.warn(ev);
-	}
+        } catch (Exception e) {
+            logger.error("Could not process a DeliverEntry notification", e);
+        }
+    }
 
-	private void uponInConnectionUp(InConnectionUp event, int channel) {
-		logger.info(event);
-	}
+    public void handleReadLogEntryRequestMessage(ReadLogEntryRequest msg, Host from, short sourceProto, int channelID) {
+        try {
 
-	private void uponInConnectionDown(InConnectionDown event, int channel) {
-		logger.warn(event);
-	}
+			long index = msg.getEntryLogIndex();
+            if (this.logEntries.containsKey(index)) {
+
+                ReadLogEntryReply readReply = new ReadLogEntryReply(index,
+                        this.logEntries.get(index));
+                readReply.signMessage(privateKey);
+
+                sendMessage(clientChannel, readReply, sourceProto, from, 0);
+
+            } else {
+                // Store to reply at a latter date
+                List<Pair<Host, Short>> pending = this.pendingReadRequest.get(index);
+                if (pending == null) {
+                    pending = new ArrayList<>();
+                    this.pendingReadRequest.put(index, pending);
+                }
+
+                pending.add(Pair.of(from, sourceProto));
+            }
+        } catch (Exception e) {
+            logger.error("Could not process a DeliverEntry notification", e);
+        }
+    }
+
+    public void handleSubscribeToLogMessage(SubscribeToLog msg, Host from, short sourceProto, int channelID) {
+        this.subscriptions.put(from, sourceProto);
+    }
+
+    private void uponOutConnectionUp(OutConnectionUp event, int channel) {
+        logger.info(event);
+    }
+
+    private void uponOutConnectionDown(OutConnectionDown event, int channel) {
+        logger.warn(event);
+    }
+
+    private void uponOutConnectionFailed(OutConnectionFailed<ProtoMessage> ev, int ch) {
+        logger.warn(ev);
+    }
+
+    private void uponInConnectionUp(InConnectionUp event, int channel) {
+        logger.info(event);
+    }
+
+    private void uponInConnectionDown(InConnectionDown event, int channel) {
+        logger.warn(event);
+    }
 }
