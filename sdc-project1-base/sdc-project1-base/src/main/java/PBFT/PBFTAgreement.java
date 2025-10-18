@@ -2,15 +2,10 @@ package PBFT;
 
 import java.io.IOException;
 import java.security.InvalidKeyException;
-import java.security.KeyStore;
-import java.security.KeyStoreException;
 import java.security.NoSuchAlgorithmException;
 import java.security.PrivateKey;
 import java.security.PublicKey;
 import java.security.SignatureException;
-import java.security.UnrecoverableKeyException;
-import java.security.cert.Certificate;
-import java.security.cert.CertificateException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -27,11 +22,13 @@ import PBFT.messages.PrepareMessage;
 import PBFT.messages.ViewChangeMessage;
 import PBFT.notifications.DeliverEntryNotification;
 import PBFT.requests.AppendRequest;
+import common.events.ChannelAvailable;
+import common.events.NeighborDown;
+import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
 import pt.unl.fct.di.novasys.network.data.Host;
-import utils.Crypto;
 import utils.SignaturesHelper;
 
 public class PBFTAgreement extends GenericProtocol {
@@ -39,78 +36,104 @@ public class PBFTAgreement extends GenericProtocol {
     public static final short PROTO_ID = 1007;
     public static final String PROTO_NAME = "PBFTAgreement";
 
-    private final Map<Long, PBFTLogEntry> log = new HashMap<>();
+    private final Map<Long, PBFTLogEntry> log;
 
     private static final long PRIMARY_TIMEOUT = 5000;
-    private long lastPrimaryResponseTime = System.currentTimeMillis();
+    private long lastPrimaryResponseTime;
 
-    private final Map<Long, Set<Host>> viewChangeVotes = new HashMap<>();
-    private final Map<Long, List<ViewChangeMessage>> receivedViewChanges = new HashMap<>();
-    private final Set<Long> startedViews = new HashSet<>();
-    private Set<Long> sentViewChange = new HashSet<>();
+    private final Map<Long, Set<Host>> viewChangeVotes;
+    private final Map<Long, List<ViewChangeMessage>> receivedViewChanges;
+    private final Set<Long> startedViews;
+    private final Set<Long> sentViewChange;
     private PrivateKey privateKey;
-    private Map<Host, PublicKey> publicKeys;
+    private final Map<Host, PublicKey> publicKeys;
 
-    private List<Host> replicas;
+    private int channelID;
+    private final List<Host> neighbors;
     private Host self;
     private Host primary;
 
-    private long seqNo = 0;
-    private int f = 1;
-    private long currentView = 0;
+    private long seqNo;
+    private int f;
+    private long currentView;
 
-    public PBFTAgreement(GenericProtocol parent) {
+    public PBFTAgreement() {
         super(PROTO_NAME, PROTO_ID);
+        this.seqNo = 0;
+        this.f = 1;
+        this.currentView = 0;
+        this.log = new HashMap<>();
+        this.lastPrimaryResponseTime = System.currentTimeMillis();
+        this.viewChangeVotes = new HashMap<>();
+        this.receivedViewChanges = new HashMap<>();
+        this.startedViews = new HashSet<>();
+        this.sentViewChange = new HashSet<>();
+        this.publicKeys = new HashMap<>();
+        this.neighbors = new ArrayList<>();
     }
 
     private boolean amPrimary() {
-        return primary.equals(self);
+        return self != null && primary != null && primary.equals(self);
     }
 
     @Override
     public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-        String me = (String) props.get("me");
+        subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
+        subscribeNotification(NeighborUp.NOTIFICATION_ID, this::uponNeighborUpNotification);
+        subscribeNotification(NeighborDown.NOTIFICATION_ID, this::uponNeighborDownNotification);
 
-        PrivateKey privKey;
+        registerRequestHandler(AppendRequest.REQUEST_ID, this::handleRequest);
+
+    }
+
+    public void handleChannelAvailableNotification(ChannelAvailable notification, short sourceProto) {
+
+        this.self = notification.getMyHost();
+        this.privateKey = notification.getMyPrivateKey();
+        this.channelID = notification.getChannelID();
+
+        registerSharedChannel(this.channelID);
+        setDefaultChannel(this.channelID);
+
+        //Register Message Serializers
+        registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
+        registerMessageSerializer(channelID, PrepareMessage.MESSAGE_ID, PrepareMessage.serializer);
+        registerMessageSerializer(channelID, CommitMessage.MESSAGE_ID, CommitMessage.serializer);
+        registerMessageSerializer(channelID, ViewChangeMessage.MESSAGE_ID, ViewChangeMessage.serializer);
+        registerMessageSerializer(channelID, NewViewMessage.MESSAGE_ID, NewViewMessage.serializer);
+
+        //Setup Message Handlers
         try {
-            privKey = Crypto.getPrivateKey(me, props);
-        } catch (IOException | KeyStoreException | NoSuchAlgorithmException | UnrecoverableKeyException | CertificateException e) {
-            throw new RuntimeException("Erro ao carregar chave privada da réplica " + me, e);
+            registerMessageHandler(channelID, PrePrepareMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onPrePrepare((PrePrepareMessage) msg, from));
+            registerMessageHandler(channelID, PrepareMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onPrepare((PrepareMessage) msg, from));
+            registerMessageHandler(channelID, CommitMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onCommit((CommitMessage) msg, from));
+            registerMessageHandler(channelID, ViewChangeMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onViewChange((ViewChangeMessage) msg, from));
+            registerMessageHandler(channelID, NewViewMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onNewView((NewViewMessage) msg, from));
+        } catch (HandlerRegistrationException e) {
+            throw new RuntimeException("Erro ao iniciar mensagens.");
         }
+    }
 
-        Map<Host, PublicKey> pubKeys = new HashMap<>();
-        try {
-            KeyStore truststore = Crypto.getTruststore(props);
-            for (Host h : replicas) {
-                Certificate cert = truststore.getCertificate(h.getAddress().toString());
-                if (cert != null) {
-                    publicKeys.put(h, cert.getPublicKey());
-                } else {
-                    throw new RuntimeException("Certificado não encontrado para " + h.getAddress().toString());
-                }
-            }
-        } catch (IOException | RuntimeException | KeyStoreException | NoSuchAlgorithmException | CertificateException e) {
-            throw new RuntimeException("Erro ao carregar chaves públicas dos replicas", e);
-        }
+    public void uponNeighborUpNotification(NeighborUp notification, short sourceProtoID) {
+        this.neighbors.add(notification.getNeighbor());
+        this.publicKeys.put(notification.getNeighbor(), notification.getPublicKey());
+        f = (neighbors.size() - 1) / 3;
+    }
 
-        this.replicas = (List<Host>) props.get("replicas");
-        this.f = (replicas.size() - 1) / 3;
-        this.self = (Host) props.get("self");
-        this.primary = (Host) props.get("primary");
-        this.publicKeys = pubKeys;
-        this.privateKey = privKey;
+    public void uponNeighborDownNotification(NeighborDown notification, short sourceProtoID) {
+        this.neighbors.remove(notification.getNeighbor());
+        publicKeys.remove(notification.getNeighbor());
+        f = Math.max((neighbors.size() - 1) / 3, 1);
+    }
 
-        registerMessageHandler(PROTO_ID, PrePrepareMessage.MESSAGE_ID,
-                (msg, from, srcProto, channel) -> onPrePrepare((PrePrepareMessage) msg, from));
-        registerMessageHandler(PROTO_ID, PrepareMessage.MESSAGE_ID,
-                (msg, from, srcProto, channel) -> onPrepare((PrepareMessage) msg, from));
-        registerMessageHandler(PROTO_ID, CommitMessage.MESSAGE_ID,
-                (msg, from, srcProto, channel) -> onCommit((CommitMessage) msg, from));
-        registerMessageHandler(PROTO_ID, ViewChangeMessage.MESSAGE_ID,
-                (msg, from, srcProto, channel) -> onViewChange((ViewChangeMessage) msg, from));
-        registerMessageHandler(PROTO_ID, NewViewMessage.MESSAGE_ID,
-                (msg, from, srcProto, channel) -> onNewView((NewViewMessage) msg, from));
+    public void handleRequest(AppendRequest req, short sourceProto) {
+        propose(req);
     }
 
     public void propose(AppendRequest req) {
@@ -128,7 +151,7 @@ public class PBFTAgreement extends GenericProtocol {
     }
 
     private void broadcast(ProtoMessage msg) {
-        for (Host h : replicas) {
+        for (Host h : neighbors) {
             if (!h.equals(self)) {
                 sendMessage(msg, h);
             }
@@ -216,7 +239,7 @@ public class PBFTAgreement extends GenericProtocol {
                 currentView = v;
             }
 
-            primary = replicas.get((int) (currentView % replicas.size()));
+            primary = neighbors.get((int) (currentView % neighbors.size()));
             if (amPrimary() && !startedViews.contains(v)) {
                 startedViews.add(v);
                 startNewView(v);
@@ -287,7 +310,7 @@ public class PBFTAgreement extends GenericProtocol {
 
     public void onNewView(NewViewMessage msg, Host from) {
 
-         try {
+        try {
             PublicKey pub = publicKeys.get(from);
             byte[] data = NewViewMessage.getBytesForSigning(msg);
             if (pub == null || !SignaturesHelper.checkSignature(data, msg.getSign(), pub)) {
@@ -310,7 +333,7 @@ public class PBFTAgreement extends GenericProtocol {
 
         if (msg.getNovaView() > currentView) {
             currentView = msg.getNovaView();
-            primary = replicas.get((int) (currentView % replicas.size()));
+            primary = neighbors.get((int) (currentView % neighbors.size()));
         }
     }
 
