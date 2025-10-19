@@ -10,7 +10,7 @@ import java.util.Enumeration;
 import java.util.Properties;
 
 import PBFT.PBFTAgreement;
-import SMR.SMReplicationProtocol;
+import blockchainReplication.BlockchainReplication;
 import app.DistributedLogManager;
 import membership.staticmembership.StaticMembershipProtocol;
 import pt.unl.fct.di.novasys.babel.core.Babel;
@@ -42,7 +42,7 @@ public class Main {
         Babel babel = Babel.getInstance();
 
         DistributedLogManager dlm = new DistributedLogManager();
-        SMReplicationProtocol rep = new SMReplicationProtocol();
+        BlockchainReplication rep = new BlockchainReplication();
         PBFTAgreement bcast = new PBFTAgreement();
 
         //To simplify lets use this protocol again

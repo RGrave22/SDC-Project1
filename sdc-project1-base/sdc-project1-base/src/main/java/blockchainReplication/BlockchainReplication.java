@@ -1,4 +1,4 @@
-package SMR;
+package blockchainReplication;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -13,11 +13,13 @@ import PBFT.PBFTAgreement;
 import PBFT.notifications.DeliverEntryNotification;
 import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
-import SMR.timers.ViewChangeTimer;
+import app.messages.client.LogEntry;
+import blockchainReplication.timers.ViewChangeTimer;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
+import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 
-public class SMReplicationProtocol extends GenericProtocol {
+public class BlockchainReplication extends GenericProtocol {
 
     public static final short PROTO_ID = 1000;
     public static final String PROTO_NAME = "SMReplication";
@@ -26,10 +28,16 @@ public class SMReplicationProtocol extends GenericProtocol {
     private final Map<Long, AppendRequest> log;
     private final Map<UUID, AppendRequest> pendingRequests;
 
-    public SMReplicationProtocol() {
+    int numberOfRequestsPerBlock = 5;
+    int difficulty = 4; //Podemos mudar a dificuldade
+    private Blockchain blockchain = new Blockchain(difficulty);
+
+
+    public BlockchainReplication() {
         super(PROTO_NAME, PROTO_ID);
         this.log = new TreeMap<>();
         this.pendingRequests = new HashMap<>();
+
     }
 
     @Override
@@ -43,17 +51,37 @@ public class SMReplicationProtocol extends GenericProtocol {
 
         subscribeNotification(NewViewNotification.NOTIFICATION_ID, this::onNewView);
 
-        setupPeriodicTimer(new ViewChangeTimer(), 3000, 3000);
-
-        registerTimerHandler(ViewChangeTimer.TIMER_ID, (ViewChangeTimer t) -> {
-            agreement.checkPrimaryTimeout();
-        });
+//        setupPeriodicTimer(new ViewChangeTimer(), 3000, 3000);
+//
+//        registerTimerHandler(ViewChangeTimer.TIMER_ID, (ViewChangeTimer t, 3000) -> {
+//            agreement.checkPrimaryTimeout();
+//        });
 
     }
 
     private void onAppend(AppendRequest req, short fromProto) {
         pendingRequests.put(req.getRequestID(), req);
-        agreement.propose(req);
+        //agreement.propose(req);
+        if(pendingRequests.size() >= numberOfRequestsPerBlock) {
+            sendBlock();
+        }
+    }
+
+    private void sendBlock() {
+        List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
+        pendingRequests.clear();
+
+        Block lastBlock = blockchain.getLastBlock();
+        Block newBlock = new Block(lastBlock.getHash(), toInclude);
+
+        // Aqui você submeteria o bloco ao acordo da camada blockchain do Babel
+        // Por exemplo, enviar para consenso, e após confirmado, adicionar localmente
+        // Simulamos consenso imediato:
+        //boolean accepted = blockchain.addBlock(newBlock);
+
+        if (accepted) {
+            deliverStableEntries();
+        }
     }
 
     private void onDeliverEntry(DeliverEntryNotification notification, short sourceProto) {

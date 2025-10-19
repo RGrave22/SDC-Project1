@@ -1,4 +1,4 @@
-package SMR.timers;
+package blockchainReplication.timers;
 
 import pt.unl.fct.di.novasys.babel.generic.ProtoTimer;
 
