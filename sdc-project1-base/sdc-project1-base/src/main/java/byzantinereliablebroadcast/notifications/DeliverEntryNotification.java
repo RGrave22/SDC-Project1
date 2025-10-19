@@ -18,7 +18,7 @@ public class DeliverEntryNotification extends ProtoNotification {
     private final byte[] clientRequest;
     private byte[] serverSignature;
 
-    //TODO NAO TENHO A CERTEZA SE A CLASSE ESTA BEM
+
     public DeliverEntryNotification(UUID id, String clientID, byte[] bs, byte[] serverSign) {
         super(NOTIFICATION_ID);
         this.requestID = id;

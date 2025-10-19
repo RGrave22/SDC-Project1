@@ -1,5 +1,7 @@
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\broadcast\messages\BroadcastMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\broadcast\CrashFaultReliableBroadcastProtocol.java
+D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\Aux.java
+D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\messages\HelloMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\broadcast\notifications\DeliveryNotification.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\Main.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\membership\staticmembership\StaticMembershipProtocol.java
@@ -13,16 +15,17 @@ D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-b
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\simplereplication\SimpleReplicationProtocol.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\simplereplication\notifications\DeliverEntryNotification.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\app\messages\client\SubscribeToLog.java
+D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\messages\ReplyMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\membership\staticmembership\message\HelloReplyMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\membership\staticmembership\message\HelloMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\common\events\NeighborUp.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\ByzantineReliableBroadcastProtocol.java
-D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\messages\ConnectionMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\utils\PublicKeyHelper.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\app\messages\client\ReadLogEntryReply.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\app\messages\client\AppendToLog.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\app\messages\client\LogEntry.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\utils\SignaturesHelper.java
+D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\messages\HelloReplyMessage.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\common\events\NeighborDown.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\simplereplication\requests\AppendRequest.java
 D:\RodrigoPC\FCT\5Ano\SDC\Project1\SDC-Project1\sdc-project1-base\sdc-project1-base\src\main\java\byzantinereliablebroadcast\requests\AppendRequest.java

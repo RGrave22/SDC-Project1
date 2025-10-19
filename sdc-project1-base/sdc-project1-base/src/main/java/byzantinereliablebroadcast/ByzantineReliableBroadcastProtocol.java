@@ -1,23 +1,23 @@
 package byzantinereliablebroadcast;
 
 import app.messages.client.AppendToLog;
+import broadcast.messages.BroadcastMessage;
+import broadcast.notifications.DeliveryNotification;
 import byzantinereliablebroadcast.messages.BRBEchoMessage;
 import byzantinereliablebroadcast.messages.BRBReadyMessage;
 import byzantinereliablebroadcast.messages.BRBSendMessage;
-import byzantinereliablebroadcast.messages.ConnectionMessage;
+import byzantinereliablebroadcast.messages.HelloMessage;
+import byzantinereliablebroadcast.messages.HelloReplyMessage;
+import byzantinereliablebroadcast.messages.ReplyMessage;
 import byzantinereliablebroadcast.notifications.DeliverEntryNotification;
 import common.events.ChannelAvailable;
-import io.netty.util.internal.SocketUtils;
-import membership.staticmembership.message.HelloMessage;
-import membership.staticmembership.message.HelloReplyMessage;
-import membership.staticmembership.message.ReplyMessage;
+import common.events.NeighborDown;
+import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
-import pt.unl.fct.di.novasys.babel.generic.ProtoNotification;
 import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import pt.unl.fct.di.novasys.babel.generic.signed.InvalidSerializerException;
-import pt.unl.fct.di.novasys.babel.handlers.MessageInHandler;
 import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
 import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
@@ -26,13 +26,14 @@ import utils.Crypto;
 
 import java.io.IOException;
 import java.net.InetAddress;
-import java.nio.channels.Channel;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import utils.SignaturesHelper;
 
 public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
@@ -46,9 +47,10 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     private HashSet<Host> candidates;
     private HashMap<Host, PublicKey> publicKeys;
 
-
     private Host myself;
     private int channelID;
+
+    private final Logger logger = LogManager.getLogger(ByzantineReliableBroadcastProtocol.class);
 
     private PrivateKey privateKey;
     private KeyStore truststore;
@@ -57,22 +59,18 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
     private HashMap<Host, Long> issuedChallenges;
 
-    //Para guardar os ecos e as delivered
+    //BRB
     private HashMap<String, HashSet<Host>> echoMsgs;
     private HashSet<String> delivered;
     private HashMap<String, Boolean> sentReady;
     private HashMap<String, HashSet<Host>> readys;
 
-    private int pi;
-
-    private static final Logger logger = LogManager.getLogger(ByzantineReliableBroadcastProtocol.class);
-
     public ByzantineReliableBroadcastProtocol() {
         super(PROTO_NAME, PROTO_ID);
 
-//        this.neighbors = new HashMap<Host, PublicKey>();
+        this.neighbors = new HashMap<Host, PublicKey>();
+        this.candidates = new HashSet<Host>();
         this.publicKeys = new HashMap<Host, PublicKey>();
-
 
         this.issuedChallenges = new HashMap<Host, Long>();
 
@@ -84,15 +82,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         this.myIdentifier = null;
 
-        //Iniciar os ecos e delivered
+        //BRB
         echoMsgs = new HashMap<>();
         delivered = new HashSet<>();
         sentReady = new HashMap<>();
         readys = new HashMap<>();
-
-        this.candidates = new  HashSet<>();
-
-        this.pi = 0;
 
     }
 
@@ -118,42 +112,42 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         this.myself = new Host(InetAddress.getByName(hostElements[0]), Short.parseShort(hostElements[1]));
 
-        //criaçao de um canal tcp para comunicaçao entre todos os processos/neighbors
         Properties channelProps = new Properties();
         channelProps.put(TCPChannel.ADDRESS_KEY, this.myself.getAddress().toString().replace("/", ""));
         channelProps.put(TCPChannel.PORT_KEY, this.myself.getPort() + "");
 
         channelID = createChannel(TCPChannel.NAME, channelProps);
 
-        //teste
-        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
-        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
-        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
-        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.InConnectionUp.EVENT_ID, this::uponInConnectionUp);
-        registerChannelEventHandler(channelID, pt.unl.fct.di.novasys.channel.tcp.events.InConnectionDown.EVENT_ID, this::uponInConnectionDown);
+        /*-------------------- Register Channel Event ------------------------------- */
+        registerChannelEventHandler(channelID, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
+        registerChannelEventHandler(channelID, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
+        registerChannelEventHandler(channelID, OutConnectionUp.EVENT_ID, this::uponOutConnectionUp);
+        registerChannelEventHandler(channelID, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
+        registerChannelEventHandler(channelID, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
-
-        //TODO perguntar se como se trata de BRB e nao Byzantine Consistent Broadcast se nao é preciso o ready
-        //Nao sei se esta correto
         /*-------------------- Register Message Serializers ------------------------------- */
+        registerMessageSerializer(channelID, HelloMessage.MESSAGE_ID, HelloMessage.serializer);
+        registerMessageSerializer(channelID, HelloReplyMessage.MESSAGE_ID, HelloReplyMessage.serializer);
+        registerMessageSerializer(channelID, ReplyMessage.MESSAGE_ID, ReplyMessage.serializer);
+
         registerMessageSerializer(channelID, BRBSendMessage.MESSAGE_ID, BRBSendMessage.serializer);
         registerMessageSerializer(channelID, BRBEchoMessage.MESSAGE_ID, BRBEchoMessage.serializer);
         registerMessageSerializer(channelID, BRBReadyMessage.MESSAGE_ID, BRBReadyMessage.serializer);
-        //registerMessageSerializer(channelID, ConnectionMessage.MESSAGE_ID, ConnectionMessage.serializer);
 
         /*-------------------- Register Message Handlers ------------------------------- */
+        registerMessageHandler(channelID, HelloMessage.MESSAGE_ID, this::uponReceiveHelloMessage);
+        registerMessageHandler(channelID, HelloReplyMessage.MESSAGE_ID, this::uponReceiveHelloReplyMessage);
+        registerMessageHandler(channelID, ReplyMessage.MESSAGE_ID, this::uponReceiveReplyMessage);
+
         registerMessageHandler(channelID, BRBSendMessage.MESSAGE_ID, this::uponReceiveSendMessage);
         registerMessageHandler(channelID, BRBEchoMessage.MESSAGE_ID, this::uponReceiveEchoMessage);
-        registerMessageHandler(channelID, BRBReadyMessage.MESSAGE_ID, this::uponRecieveReadyMessage);
-//        registerMessageHandler(channelID, ConnectionMessage.MESSAGE_ID, this::uponReceiveChannelAvailable);
+        registerMessageHandler(channelID, BRBReadyMessage.MESSAGE_ID, this::uponReceiveReadyMessage);
 
         /*-------------------- Register Request Handlers ------------------------------- */
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
-        //subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::uponReceiveChannelAvailable);
+        // Process neighbors and open connection to them
 
-
-        // Process neighbors and open connection to them (Copiado do staticmembership)
         String[] neighborsCandidates = props.getProperty(PAR_NEIGHBORS).split(",");
         for (int i = 0; i < neighborsCandidates.length; i++) {
             hostElements = neighborsCandidates[i].split(":");
@@ -163,13 +157,13 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             }
         }
 
-        System.out.println("Neighbours: " + candidates.toString() + " size: " + candidates.size());
+        for (Host h : this.candidates) {
+            //This is a simple hack to ensure that only the node with highest port starts establishing the protocol
+            if(h.getPort() < myself.getPort()) {
+                openConnection(h);
+            }
+        }
 
-        //numero de processos existentes
-        pi = candidates.size() + 1;
-
-
-        //copiado do static membership
         try {
             this.privateKey = Crypto.getPrivateKey(myIdentifier, props);
             this.truststore = Crypto.getTruststore(props);
@@ -180,34 +174,10 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             System.exit(1);
         }
 
-
-        //copiado do staticmembership
-        int i = 1;
-        for (Host h : this.candidates) {
-            //This is a simple hack to ensure that only the node with highest port starts establishing the protocol
-            if(h.getPort() < myself.getPort()) {
-                System.out.println(i);
-                openConnection(h);
-                i++;
-                System.out.println(h);
-            }
-        }
-
-
-
-        myIdentifier = props.getProperty(Crypto.CRYPTO_NAME_KEY);
-        logger.info("Initializing BRB protocol for node {}", myIdentifier);
-
         triggerNotification(new ChannelAvailable(TCPChannel.NAME, channelID, myself, privateKey, publicKey));
-
     }
 
-
-
-
     private void handleAppendRequest(ProtoRequest protoRequest, short protoId) {
-        //TODO Nao sei se é necessario todo este aparato para criar o mid, se nao, é mais facil
-        //TODO Fará sendito a BRB message, em vez de enviar um byte[] mandar mesmo objeto AppendTolog?
         try{
             AppendRequest req = (AppendRequest) protoRequest;
 
@@ -215,44 +185,63 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             AppendToLog atL = AppendToLog.deserializeRequest(bs);
 
             String msg = atL.getLogEntry();
+            long timestamp = atL.getTimestamp();
             System.out.println(msg);
 
-//            String mid = UUID.fromString(msg).toString(); //ou a função auxiliar que fiz
-            String mid = UUID.randomUUID().toString();
+
+            //Qual a melhor opçao? TODO Perguntar ao stor
+//            String mid = UUID.randomUUID().toString();
+            String mid = generateUniqueID(msg,timestamp);
 
             logger.info("Received AppendRequest from client {}: logEntry='{}', generated MID={}",
                     atL.getClientID(), msg, mid);
 
             BRBSendMessage brbsendmsg = new BRBSendMessage(myself, mid, bs);
 
-            //brbsendmsg.signMessage(privateKey);
+            brbsendmsg.signMessage(privateKey);
 
-            for (Host h : candidates) {
+            for (Host h : neighbors.keySet()) {
                 System.out.println(h);
                 sendMessage(brbsendmsg, h);
             }
 
-           //"envia" para o proprio
+            //simula o envio para o proprio
             uponReceiveSendMessage(brbsendmsg, myself, PROTO_ID, channelID);
 
         } catch (IOException e) {
             throw new RuntimeException(e);
-//        } catch (NoSuchAlgorithmException e) {
-//            throw new RuntimeException(e);
-//        } catch (InvalidSerializerException e) {
-//            throw new RuntimeException(e);
-//        } catch (SignatureException e) {
-//            throw new RuntimeException(e);
-//        } catch (InvalidKeyException e) {
-//            throw new RuntimeException(e);
+
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException(e);
+        } catch (InvalidSerializerException e) {
+            throw new RuntimeException(e);
+        } catch (SignatureException e) {
+            throw new RuntimeException(e);
+        } catch (InvalidKeyException e) {
+            throw new RuntimeException(e);
         }
 
     }
 
-    private void uponRecieveReadyMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
+    private void uponReceiveReadyMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBReadyMessage msg = (BRBReadyMessage) protoMessage;
         logger.info("Received READY: " + msg.getPayload() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
+        //check the incoming message signature
+        if(this.publicKeys.containsKey(msg.getSender()) && !sender.equals(myself)) {
+            try {
+                if(!msg.checkSignature(this.publicKeys.get(msg.getSender()))){
+                    throw new Exception();
+                }
+            } catch (Exception e) {
+                logger.error("Could not verify authenticity of BroadcastMessage sent by " + msg.getSender());
+                e.printStackTrace();
+            }
+        } else if (msg.getSender().equals(myself)) {
+            logger.info("Message received from myself, no need to check the signature.");
+        } else {
+            logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
+        }
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
@@ -260,14 +249,13 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         readys.putIfAbsent(mid, new HashSet<>());
         HashSet<Host> readyHosts = readys.get(mid);
 
-
-
         if(!readyHosts.contains(sender)) {
             readyHosts.add(sender);
 
             System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size());
 
 
+            int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
             if (!sentReady.get(mid) && (readyHosts.size() > f)) {
@@ -275,14 +263,15 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                 BRBReadyMessage readyMsg = new BRBReadyMessage(myself, mid, payload);
 
-                for (Host h : candidates) {
-//                try {
-//                    readyMsg.sign(privateKey);
-//                } catch (Exception e) {
-//                    e.printStackTrace();
-//                    continue;
-//                }
-                    sendMessage(readyMsg, h);
+                //sign the ready message
+                try {
+                    readyMsg.signMessage(privateKey);
+                    for (Host h : neighbors.keySet()) {
+                        sendMessage(readyMsg, h);
+                    }
+                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException |
+                         InvalidKeyException e) {
+                    throw new RuntimeException(e);
                 }
             }
 
@@ -312,17 +301,24 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         BRBEchoMessage msg = (BRBEchoMessage) protoMessage;
         logger.info("Received ECHO: " + msg.getPayload().toString() + "ID: " + msg.getMessageId() + "HOST: " + sender.getAddress() + ":" + sender.getPort());
 
-        //Não sei bem se é necessario
-//        try {
-//
-//            if (!msg.verifySignature(publicKeys.get(sender))) {
-//                System.err.println("Assinatura inválida do echo de " + sender);
-//                return;
-//            }
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//            return;
-//        }
+        System.out.println(publicKeys.keySet());
+
+        if(this.publicKeys.containsKey(msg.getSender()) && !msg.getSender().equals(myself)) {
+            try {
+                if (!msg.checkSignature(publicKeys.get(sender))) {
+                    System.err.println("Assinatura inválida do echo de " + sender);
+                    return;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                return;
+            }
+        } else if (msg.getSender().equals(myself)) {
+            logger.info("Message received from myself, no need to check the signature.");
+        } else {
+            logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
+        }
+
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
@@ -335,24 +331,24 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         if (!echoes.contains(sender)) {
             echoes.add(sender);
 
-
+            int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
             //IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
-            if ((echoes.size() >= ((2*f) +1)) && !sentReady.get(mid)) {
-    //            delivered.add(mid);
+            if ((echoes.size() >= ((2*f) + 1)) && !sentReady.get(mid)) {
+                //            delivered.add(mid);
 
                 try {
-    //                AppendToLog atL = AppendToLog.deserializeRequest(payload);
-                    //Não sei se ta bem criado
-    //                DeliverEntryNotification notification = new DeliverEntryNotification(UUID.fromString(mid), atL.getClientID(), payload, null);
-    //                notification.sign(privateKey);
 
                     sentReady.put(mid, true);
 
                     BRBReadyMessage readyMsg = new BRBReadyMessage(myself, mid, payload);
 
-                    for (Host h : candidates) {
+                    readyMsg.signMessage(privateKey);
+
+
+
+                    for (Host h : neighbors.keySet()) {
                         if (!h.equals(myself)) {
                             //logger.info("Sent BRBReadyMessage MID={} to {}", mid, h);
                             System.out.println("Sent READY TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
@@ -360,11 +356,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                         }
                     }
 
-                    uponRecieveReadyMessage(readyMsg, myself, protoId, channel);
+                    uponReceiveReadyMessage(readyMsg, myself, protoId, channel);
 
-
-                    //triggerNotification(notification);
-
+                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException |
+                         InvalidKeyException e) {
+                    throw new RuntimeException(e);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }
@@ -372,13 +368,34 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         }
     }
 
-    //TODO AINDA NAO SEI SE ESTA BEM
-    private void uponReceiveSendMessage(ProtoMessage protoMessage, Host host, short protoId, int channel) {
+    //TODO meter && host != myself na verificação da chave
+    private void uponReceiveSendMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBSendMessage msg = (BRBSendMessage) protoMessage;
-        System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + host.getAddress() + ":" + host.getPort());
+        System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
+
+        System.out.println("KEYSET: " + publicKeys.keySet());
+
+        System.out.println("Sender da msg: " + msg.getSender());
+        System.out.println("mySelf: " + myself);
+        System.out.println("sender: " + sender);
+
+        if(this.publicKeys.containsKey(msg.getSender())) {
+            try {
+                if (!msg.checkSignature(this.publicKeys.get(msg.getSender()))) {
+                    throw new Exception();
+                }
+            } catch (Exception e) {
+                logger.error("Could not verify authenticity of BroadcastMessage sent by " + msg.getSender());
+                e.printStackTrace();
+            }
+        } else if (msg.getSender().equals(myself)) {
+                logger.info("Message received from myself, no need to check the signature.");
+        } else {
+                logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
+            }
 
 
         echoMsgs.putIfAbsent(mid, new HashSet<>());
@@ -391,35 +408,36 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
             BRBEchoMessage echoMsg = new BRBEchoMessage(myself, mid, payload);
 
-//            try {
-//                echoMsg.signMessage(privateKey);
-//            } catch (Exception e) {
-//                //logger.error("Error signing ECHO message for mid " + mid, e);
-//                return;
-//            }
+            try {
+                echoMsg.signMessage(privateKey);
 
 
-            for (Host h : candidates) {
-                if (!h.equals(myself)) {
-                    //logger.info("Sent BRBEchoMessage MID={} to {}", mid, h);
-                    System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
-                    sendMessage(echoMsg, h);
+
+                for (Host h : neighbors.keySet()) {
+                    if (!h.equals(myself)) {
+                        //logger.info("Sent BRBEchoMessage MID={} to {}", mid, h);
+                        System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
+                        sendMessage(echoMsg, h);
+                    }
                 }
+
+            } catch (Exception e) {
+                //logger.error("Error signing ECHO message for mid " + mid, e);
+                return;
             }
 
-
-            //uponReceiveEchoMessage(echoMsg, myself, protoId, channel);
-
+            uponReceiveEchoMessage(echoMsg, myself, protoId, channel);
         }
 
 
     }
 
-    //auxiliar para gerar id, acho que nao vai ser preciso
-    private String generateUniqueID(String payload) throws NoSuchAlgorithmException {
-        //Podemos fazer assim? ou podemos ter apenas um counter para os ids?
+
+    private String generateUniqueID(String payload, long timestamp) throws NoSuchAlgorithmException {
+        String msg = payload + "-" + timestamp;
+
         MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] digest = md.digest(payload.getBytes(StandardCharsets.UTF_8));
+        byte[] digest = md.digest(msg.getBytes(StandardCharsets.UTF_8));
 
 
         StringBuilder hexString = new StringBuilder();
@@ -429,60 +447,185 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         System.out.println("MD5 hash: " + hexString.toString());
 
-
-
         return hexString.toString();
     }
 
+    /*
+     * --------------------------------- Message Handlers
+     * ----------------------------
+     */
 
-    //Teste
-    private void uponInConnectionUp(InConnectionUp event, int channelId) {
-//        logger.info("Host (in) {} is up", event.getNode());
-//        if (!this.neighbors.containsKey(event.getNode())) {
-//            this.candidates.remove(event.getNode());
-//            this.neighbors.put(event.getNode(), null);
-            openConnection(event.getNode());
-//        }
+    private void uponReceiveHelloMessage(HelloMessage msg, Host sender, short protoID, int channel) {
+        if (!sender.equals(msg.getSender())) {
+            logger.error("Received a HelloMessage from the socker of " + sender + " issued by " + msg.getSender());
+            return;
+        }
+
+        this.publicKeys.put(msg.getSender(), msg.getPubKey());
+        long hisChallenge = msg.getChallenge();
+        long myChallenge = new Random(System.currentTimeMillis()).nextLong();
+        this.issuedChallenges.put(msg.getSender(), myChallenge);
+
+        byte[] challengeAnswer = null;
+        try {
+            logger.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
+            Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
+            sig.initSign(privateKey);
+            sig.update(ByteBuffer.allocate(Long.BYTES).putLong(hisChallenge).array());
+            challengeAnswer = sig.sign();
+        } catch (Exception e) {
+            logger.error("Could not generate a valid answer to the challenge of " + msg.getSender());
+            e.printStackTrace();
+        }
+
+        logger.info("Answering challenge put fowards by " + msg.getSender() + " sending my Challenge: " + myChallenge);
+        HelloReplyMessage hrm = new HelloReplyMessage(myself, publicKey, challengeAnswer, myChallenge);
+
+        try {
+            hrm.signMessage(privateKey);
+            sendMessage(hrm , msg.getSender());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
 
-    private void uponInConnectionDown(InConnectionDown event, int channelId) {
-        logger.info("Connection from host {} is down, cause: {}", event.getNode(), event.getCause());
+    private void uponReceiveHelloReplyMessage(HelloReplyMessage msg, Host sender, short protoID, int channel) {
+        if (!sender.equals(msg.getSender())) {
+            logger.error("Received a HelloReplyMessage from the socker of " + sender + " issued by " + msg.getSender());
+            return;
+        }
+
+        // Validate his answer to my challenge
+        try {
+            logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: " + issuedChallenges.get(msg.getSender()));
+            Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
+            sig.initVerify(msg.getPubKey());
+            sig.update(ByteBuffer.allocate(Long.BYTES).putLong(issuedChallenges.get(msg.getSender())).array());
+            if (sig.verify(msg.getChallengeReply())) {
+                logger.info("Challenge has been correctly answered by " + msg.getSender());
+                issuedChallenges.remove(msg.getSender());
+                this.candidates.remove(msg.getSender());
+                this.neighbors.put(msg.getSender(), msg.getPubKey());
+                this.publicKeys.put(msg.getSender(), msg.getPubKey());
+                triggerNotification(new NeighborUp(msg.getSender(), this.neighbors.get(msg.getSender())));
+            } else {
+                logger.error("Challenge was incorrectly answered by " + msg.getSender());
+                closeConnection(msg.getSender());
+                return;
+            }
+        } catch (Exception e) {
+            logger.info("Error while validating the challenge answer of " + msg.getSender());
+            e.printStackTrace();
+            closeConnection(msg.getSender());
+            return;
+        }
+
+        // Generate an answer to his challenge
+        byte[] challengeAnswer = null;
+        try {
+            logger.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
+            Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
+            sig.initSign(privateKey);
+            sig.update(ByteBuffer.allocate(Long.BYTES).putLong(msg.getChallenge()).array());
+            challengeAnswer = sig.sign();
+        } catch (Exception e) {
+            logger.error("Could not generate a valid answer to the challenge of " + msg.getSender());
+            e.printStackTrace();
+        }
+
+        // send the reply
+        ReplyMessage rm = new ReplyMessage(myself, challengeAnswer);
+        try {
+            rm.signMessage(privateKey);
+            sendMessage(rm, msg.getSender());
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
     }
+
+    private void uponReceiveReplyMessage(ReplyMessage msg, Host sender, short protoID, int channel) {
+        if (!sender.equals(msg.getSender())) {
+            logger.error("Received a ReplyMessage from the socker of " + sender + " issued by " + msg.getSender());
+            return;
+        }
+
+        // Validate his answer to my challenge
+        try {
+            logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: " + issuedChallenges.get(msg.getSender()));
+            Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
+            sig.initVerify(publicKeys.get(msg.getSender()));
+            sig.update(ByteBuffer.allocate(Long.BYTES).putLong(issuedChallenges.get(msg.getSender())).array());
+            if (sig.verify(msg.getChallengeReply())) {
+                logger.info("Challenge has been correctly answered by " + msg.getSender());
+                issuedChallenges.remove(msg.getSender());
+                this.candidates.remove(msg.getSender());
+                this.neighbors.put(msg.getSender(), publicKeys.get(msg.getSender()));
+                //triggerNotification(new NeighborUp(msg.getSender(), this.neighbors.get(msg.getSender())));
+            } else {
+                logger.error("Challenge was incorrectly answered by " + msg.getSender());
+                closeConnection(msg.getSender());
+                return;
+            }
+        } catch (Exception e) {
+            logger.info("Error while validating the challenge answer of " + msg.getSender());
+            e.printStackTrace();
+            closeConnection(msg.getSender());
+            return;
+        }
+    }
+
+    /*
+     * --------------------------------- Channel Events ----------------------------
+     */
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
-//        logger.info("Host {} is down, cause: {}", event.getNode(), event.getCause());
-//        if (this.candidates.contains(event.getNode()))
-//            this.candidates.remove(event.getNode());
-//        else if (this.neighbors.containsKey(event.getNode())) {
-//            this.neighbors.remove(event.getNode());
-//        }
+        logger.info("Host {} is down, cause: {}", event.getNode(), event.getCause());
+        if (this.candidates.contains(event.getNode()))
+            this.candidates.remove(event.getNode());
+        else if (this.neighbors.containsKey(event.getNode())) {
+            this.neighbors.remove(event.getNode());
+        }
     }
 
     private void uponOutConnectionFailed(OutConnectionFailed<?> event, int channelId) {
         logger.info("Connection to host {} failed, cause: {}", event.getNode(), event.getCause());
-//        this.candidates.remove(event.getNode());
         this.candidates.remove(event.getNode());
     }
 
     private void uponOutConnectionUp(OutConnectionUp event, int channelId) {
         logger.info("Host (out) {} is up", event.getNode());
-//        if (this.candidates.remove(event.getNode())) {
-//            this.neighbors.put(event.getNode(), null);
-//            this.issuedChallenges.put(event.getNode(), new Random(System.currentTimeMillis()).nextLong());
-//
-//            logger.info("Sending a challenge to " + event.getNode() + ": " + this.issuedChallenges.get(event.getNode()));
-//
-//            HelloMessage hm = new HelloMessage(myself, publicKey, this.issuedChallenges.get(event.getNode()));
-//            try {
-//                hm.signMessage(privateKey);
-//                sendMessage(hm,event.getNode());
-//                logger.info("Out connection is up for " + event.getNode() + " sent challenge...");
-//            } catch (Exception e) {
-//                e.printStackTrace();
-//            }
-//        } else {
-//            logger.info("Out connection is up for " + event.getNode() + " but node is not part of candidates.");
-//        }
+        if (this.candidates.remove(event.getNode())) {
+            this.neighbors.put(event.getNode(), null);
+            this.issuedChallenges.put(event.getNode(), new Random(System.currentTimeMillis()).nextLong());
+
+            logger.info("Sending a challenge to " + event.getNode() + ": " + this.issuedChallenges.get(event.getNode()));
+
+            HelloMessage hm = new HelloMessage(myself, publicKey, this.issuedChallenges.get(event.getNode()));
+            try {
+                hm.signMessage(privateKey);
+                sendMessage(hm,event.getNode());
+                logger.info("Out connection is up for " + event.getNode() + " sent challenge...");
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        } else {
+            logger.info("Out connection is up for " + event.getNode() + " but node is not part of candidates.");
+        }
+    }
+
+    private void uponInConnectionUp(InConnectionUp event, int channelId) {
+        logger.info("Host (in) {} is up", event.getNode());
+        if (!this.neighbors.containsKey(event.getNode())) {
+            this.candidates.remove(event.getNode());
+            this.neighbors.put(event.getNode(), null);
+            openConnection(event.getNode());
+        }
+    }
+
+    private void uponInConnectionDown(InConnectionDown event, int channelId) {
+        logger.info("Connection from host {} is down, cause: {}", event.getNode(), event.getCause());
     }
 
 }

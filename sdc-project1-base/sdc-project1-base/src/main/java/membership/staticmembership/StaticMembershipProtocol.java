@@ -86,7 +86,7 @@ public class StaticMembershipProtocol extends GenericProtocol {
 				System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter: " + PAR_NEIGHBORS
 						+ " (format: IP:PORT,IP:PORT,...,IP:PORT");	
 			if(!props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
-				System.err.println("Protocol " + PROTO_NAME + " requires mandatory paramter " + Crypto.CRYPTO_NAME_KEY);
+				System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter " + Crypto.CRYPTO_NAME_KEY);
 			}
 			System.exit(1);
 		}
