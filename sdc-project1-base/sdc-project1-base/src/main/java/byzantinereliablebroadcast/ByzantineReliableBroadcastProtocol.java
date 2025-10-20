@@ -1,17 +1,15 @@
 package byzantinereliablebroadcast;
 
 import app.messages.client.AppendToLog;
-import broadcast.messages.BroadcastMessage;
-import broadcast.notifications.DeliveryNotification;
 import byzantinereliablebroadcast.messages.BRBEchoMessage;
 import byzantinereliablebroadcast.messages.BRBReadyMessage;
 import byzantinereliablebroadcast.messages.BRBSendMessage;
 import byzantinereliablebroadcast.messages.HelloMessage;
 import byzantinereliablebroadcast.messages.HelloReplyMessage;
 import byzantinereliablebroadcast.messages.ReplyMessage;
-import byzantinereliablebroadcast.notifications.DeliverEntryNotification;
+import byzantinereliablebroadcast.notifications.DeliverBroadcastedEntryNotification;
+import byzantinereliablebroadcast.requests.BroadcastRequest;
 import common.events.ChannelAvailable;
-import common.events.NeighborDown;
 import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -27,12 +25,12 @@ import utils.Crypto;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.nio.charset.StandardCharsets;
 import java.security.*;
 import java.util.*;
 
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
+import utils.MessageIdHelper;
 import utils.SignaturesHelper;
 
 public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
@@ -46,6 +44,8 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     private HashMap<Host, PublicKey> neighbors;
     private HashSet<Host> candidates;
     private HashMap<Host, PublicKey> publicKeys;
+
+    private static final short MIN_NEIGHBORS = 3;
 
     private Host myself;
     private int channelID;
@@ -64,6 +64,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     private HashSet<String> delivered;
     private HashMap<String, Boolean> sentReady;
     private HashMap<String, HashSet<Host>> readys;
+
 
     public ByzantineReliableBroadcastProtocol() {
         super(PROTO_NAME, PROTO_ID);
@@ -125,29 +126,30 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         registerChannelEventHandler(channelID, InConnectionUp.EVENT_ID, this::uponInConnectionUp);
         registerChannelEventHandler(channelID, InConnectionDown.EVENT_ID, this::uponInConnectionDown);
 
-        /*-------------------- Register Message Serializers ------------------------------- */
+        /*-------------------- Register Message Serializers for StaticMembership ------------------------------- */
         registerMessageSerializer(channelID, HelloMessage.MESSAGE_ID, HelloMessage.serializer);
         registerMessageSerializer(channelID, HelloReplyMessage.MESSAGE_ID, HelloReplyMessage.serializer);
         registerMessageSerializer(channelID, ReplyMessage.MESSAGE_ID, ReplyMessage.serializer);
 
+        /*-------------------- Register Message Serializers BRB------------------------------- */
         registerMessageSerializer(channelID, BRBSendMessage.MESSAGE_ID, BRBSendMessage.serializer);
         registerMessageSerializer(channelID, BRBEchoMessage.MESSAGE_ID, BRBEchoMessage.serializer);
         registerMessageSerializer(channelID, BRBReadyMessage.MESSAGE_ID, BRBReadyMessage.serializer);
 
-        /*-------------------- Register Message Handlers ------------------------------- */
+        /*-------------------- Register Message Handlers for StaticMembership ------------------------------- */
         registerMessageHandler(channelID, HelloMessage.MESSAGE_ID, this::uponReceiveHelloMessage);
         registerMessageHandler(channelID, HelloReplyMessage.MESSAGE_ID, this::uponReceiveHelloReplyMessage);
         registerMessageHandler(channelID, ReplyMessage.MESSAGE_ID, this::uponReceiveReplyMessage);
 
+        /*-------------------- Register Message Handlers for BRB -----------------------------*/
         registerMessageHandler(channelID, BRBSendMessage.MESSAGE_ID, this::uponReceiveSendMessage);
         registerMessageHandler(channelID, BRBEchoMessage.MESSAGE_ID, this::uponReceiveEchoMessage);
         registerMessageHandler(channelID, BRBReadyMessage.MESSAGE_ID, this::uponReceiveReadyMessage);
 
         /*-------------------- Register Request Handlers ------------------------------- */
-        registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
+        registerRequestHandler(AppendRequest.REQUEST_ID, this::handleBroadcastRequest);
 
         // Process neighbors and open connection to them
-
         String[] neighborsCandidates = props.getProperty(PAR_NEIGHBORS).split(",");
         for (int i = 0; i < neighborsCandidates.length; i++) {
             hostElements = neighborsCandidates[i].split(":");
@@ -177,26 +179,26 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         triggerNotification(new ChannelAvailable(TCPChannel.NAME, channelID, myself, privateKey, publicKey));
     }
 
-    private void handleAppendRequest(ProtoRequest protoRequest, short protoId) {
+    private void handleBroadcastRequest(ProtoRequest protoRequest, short protoId) {
         try{
-            AppendRequest req = (AppendRequest) protoRequest;
+            BroadcastRequest req = (BroadcastRequest) protoRequest;
 
             byte[] bs = req.getClientRequest();
             AppendToLog atL = AppendToLog.deserializeRequest(bs);
 
             String msg = atL.getLogEntry();
             long timestamp = atL.getTimestamp();
+
             System.out.println(msg);
 
+            String mid = MessageIdHelper.generateUniqueID(msg, timestamp);
 
-            //Qual a melhor opçao? TODO Perguntar ao stor
-//            String mid = UUID.randomUUID().toString();
-            String mid = generateUniqueID(msg,timestamp);
+            logger.info("Received BroadcastRequest from client {}: logEntry='{}', generated MID={}",
+                     atL.getClientID(), msg, mid);
 
-            logger.info("Received AppendRequest from client {}: logEntry='{}', generated MID={}",
-                    atL.getClientID(), msg, mid);
+            byte[] brPayload = req.serialize();
 
-            BRBSendMessage brbsendmsg = new BRBSendMessage(myself, mid, bs);
+            BRBSendMessage brbsendmsg = new BRBSendMessage(myself, mid, brPayload);
 
             brbsendmsg.signMessage(privateKey);
 
@@ -227,7 +229,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         BRBReadyMessage msg = (BRBReadyMessage) protoMessage;
         logger.info("Received READY: " + msg.getPayload() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
-        //check the incoming message signature
         if(this.publicKeys.containsKey(msg.getSender()) && !sender.equals(myself)) {
             try {
                 if(!msg.checkSignature(this.publicKeys.get(msg.getSender()))){
@@ -252,7 +253,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         if(!readyHosts.contains(sender)) {
             readyHosts.add(sender);
 
-            System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size());
+            System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size() + " PARA O ID: " + msg.getMessageId());
 
 
             int pi = neighbors.keySet().size() + 1;
@@ -263,7 +264,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                 BRBReadyMessage readyMsg = new BRBReadyMessage(myself, mid, payload);
 
-                //sign the ready message
                 try {
                     readyMsg.signMessage(privateKey);
                     for (Host h : neighbors.keySet()) {
@@ -280,12 +280,17 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                 delivered.add(mid);
 
                 try {
-                    AppendToLog atL = AppendToLog.deserializeRequest(payload);
-                    DeliverEntryNotification notification = new DeliverEntryNotification(UUID.randomUUID(), atL.getClientID(), payload, null);
-                    //notification.sign(privateKey);
 
-                    logger.info("Delivered entry MID={} from client {} via BRB: logEntry='{}'",
-                            mid, atL.getClientID(), atL.getLogEntry());
+                    BroadcastRequest br = BroadcastRequest.deserialize(payload);
+
+                    AppendToLog atL = AppendToLog.deserializeRequest(br.getClientRequest());
+
+                    DeliverBroadcastedEntryNotification notification = new DeliverBroadcastedEntryNotification(atL.getRequestID(), atL.getClientID(), payload, null);
+
+                    notification.sign(privateKey);
+
+                    logger.info("Delivered entry MID={} from client {} via BRB: logEntry='{}' for requestId:{}",
+                            mid, atL.getClientID(), atL.getLogEntry(), notification.getRequestID());
 
                     triggerNotification(notification);
 
@@ -334,9 +339,8 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
-            //IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
+            // TODO IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
             if ((echoes.size() >= ((2*f) + 1)) && !sentReady.get(mid)) {
-                //            delivered.add(mid);
 
                 try {
 
@@ -346,11 +350,8 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                     readyMsg.signMessage(privateKey);
 
-
-
                     for (Host h : neighbors.keySet()) {
                         if (!h.equals(myself)) {
-                            //logger.info("Sent BRBReadyMessage MID={} to {}", mid, h);
                             System.out.println("Sent READY TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                             sendMessage(readyMsg, h);
                         }
@@ -368,7 +369,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         }
     }
 
-    //TODO meter && host != myself na verificação da chave
+
     private void uponReceiveSendMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBSendMessage msg = (BRBSendMessage) protoMessage;
         System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
@@ -395,8 +396,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                 logger.info("Message received from myself, no need to check the signature.");
         } else {
                 logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
-            }
-
+        }
 
         echoMsgs.putIfAbsent(mid, new HashSet<>());
 
@@ -433,27 +433,9 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     }
 
 
-    private String generateUniqueID(String payload, long timestamp) throws NoSuchAlgorithmException {
-        String msg = payload + "-" + timestamp;
-
-        MessageDigest md = MessageDigest.getInstance("MD5");
-        byte[] digest = md.digest(msg.getBytes(StandardCharsets.UTF_8));
 
 
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : digest) {
-            hexString.append(String.format("%02x", b));
-        }
-
-        System.out.println("MD5 hash: " + hexString.toString());
-
-        return hexString.toString();
-    }
-
-    /*
-     * --------------------------------- Message Handlers
-     * ----------------------------
-     */
+    /* --------------------------------- Message Handlers for StaticMembership ---------------------------- */
 
     private void uponReceiveHelloMessage(HelloMessage msg, Host sender, short protoID, int channel) {
         if (!sender.equals(msg.getSender())) {
@@ -576,16 +558,17 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         }
     }
 
-    /*
-     * --------------------------------- Channel Events ----------------------------
-     */
+    /*--------------------------------- Channel Events ----------------------------*/
+
 
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
         logger.info("Host {} is down, cause: {}", event.getNode(), event.getCause());
-        if (this.candidates.contains(event.getNode()))
-            this.candidates.remove(event.getNode());
-        else if (this.neighbors.containsKey(event.getNode())) {
-            this.neighbors.remove(event.getNode());
+        if(neighbors.size() > MIN_NEIGHBORS) { //To ensure we always work with at least 4 nodes.
+            if (this.candidates.contains(event.getNode()))
+                this.candidates.remove(event.getNode());
+            else if (this.neighbors.containsKey(event.getNode())) {
+                this.neighbors.remove(event.getNode());
+            }
         }
     }
 

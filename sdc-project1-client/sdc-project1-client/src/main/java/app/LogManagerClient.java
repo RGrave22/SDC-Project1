@@ -350,6 +350,7 @@ public class LogManagerClient {
 		}
 		
 		public void handleAppentToLogReply(AppendToLogReply msg, Host h, short protoId, int channel) {
+            System.out.println("TESTE");
 			clearTimeout();
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);

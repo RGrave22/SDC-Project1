@@ -35,6 +35,7 @@ import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionDown;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionFailed;
 import pt.unl.fct.di.novasys.channel.tcp.events.OutConnectionUp;
 import pt.unl.fct.di.novasys.network.data.Host;
+import byzantinereliablebroadcast.notifications.DeliverBroadcastedEntryNotification;
 import simplereplication.notifications.DeliverEntryNotification;
 import simplereplication.requests.AppendRequest;
 
@@ -135,10 +136,13 @@ public class DistributedLogManager extends GenericProtocol {
 
 	public void handleAppendToLogMessage(AppendToLog msg, Host from, short sourceProto, int channelID) {
 		try {
-			AppendRequest req = new AppendRequest(msg.getClientID(), myself, msg.serializeRequest());
-			req.sign(privateKey);
+            //troquei o contrutor para manter o ID do Append to Log
+			//AppendRequest req = new AppendRequest(msg.getRequestID(), msg.getClientID(), myself, msg.serializeRequest(), null);
+            AppendRequest req = new AppendRequest(msg.getClientID(), myself, msg.serializeRequest());
+            req.sign(privateKey);
 
-			pendingAppendRequests.put(req.getRequestID(), Pair.of(from, sourceProto));
+            System.out.println("ID QUE ENTRA NO PENDING: " + req.getRequestID());
+            pendingAppendRequests.put(req.getRequestID(), Pair.of(from, sourceProto));
 
 			sendRequest(req, underlyingProtocolID);
 
@@ -154,10 +158,13 @@ public class DistributedLogManager extends GenericProtocol {
 	
 	public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
 		try {
+            System.out.println("Teste1");
 			AppendToLog originalRequest = AppendToLog.deserializeRequest(not.getClientRequest());
 
+            System.out.println("Teste2");
 			writeToLogAndFlush(nextEntryIndex, originalRequest.generateFullLogEntry());
-			
+
+            System.out.println("ReqId: " + not.getRequestID() + " KeySet: " +   pendingAppendRequests.keySet());
 			Pair<Host, Short> info = pendingAppendRequests.remove(not.getRequestID());
 
 			AppendToLogReply reply = new AppendToLogReply(originalRequest.getClientID(), nextEntryIndex);
@@ -189,6 +196,7 @@ public class DistributedLogManager extends GenericProtocol {
 
 			this.nextEntryIndex++;
 		} catch (Exception e) {
+            System.out.println("ERRO");
 			logger.error("Could not process a DeliverEntry notification", e);
 		}
 	}

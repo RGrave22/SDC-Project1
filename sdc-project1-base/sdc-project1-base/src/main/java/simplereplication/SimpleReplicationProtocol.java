@@ -1,6 +1,7 @@
 package simplereplication;
 
-import broadcast.messages.BroadcastMessage;
+import app.messages.client.AppendToLog;
+import byzantinereliablebroadcast.requests.BroadcastRequest;
 import common.events.ChannelAvailable;
 import common.events.NeighborDown;
 import common.events.NeighborUp;
@@ -8,9 +9,9 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
-import pt.unl.fct.di.novasys.babel.generic.ProtoNotification;
 import pt.unl.fct.di.novasys.network.data.Host;
-import byzantinereliablebroadcast.notifications.DeliverEntryNotification;
+import byzantinereliablebroadcast.notifications.DeliverBroadcastedEntryNotification;
+import simplereplication.notifications.DeliverEntryNotification;
 import simplereplication.requests.AppendRequest;
 
 
@@ -67,7 +68,7 @@ public class SimpleReplicationProtocol extends GenericProtocol {
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
         //subscreve as notificações do BRB
-        subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::handleDeliverNotification);
+        subscribeNotification(DeliverBroadcastedEntryNotification.NOTIFICATION_ID, this::handleDeliverNotification);
 
     }
 
@@ -98,20 +99,31 @@ public class SimpleReplicationProtocol extends GenericProtocol {
 
 
     public void handleAppendRequest(AppendRequest request, short protoID) {
-        logger.info("Received AppendRequest: UUID={} from client={}",
+        logger.info("Received BroadcastRequest: UUID={} from client={}",
                 request.getRequestID(), request.getClientID());
 
-        sendRequest(request, underlyingProtocolID);
+        BroadcastRequest broadcastRequest = new BroadcastRequest(request.getRequestID().toString(), request.getClientID(), request.getSource(), request.getClientRequest());
 
-        logger.debug("Forwarded AppendRequest UUID={} to underlying protocol {}", request.getRequestID(), underlyingProtocolID);
+        sendRequest(broadcastRequest, underlyingProtocolID);
+
+        logger.debug("Forwarded BroadcastRequest UUID={} to underlying protocol {}", request.getRequestID(), underlyingProtocolID);
     }
 
-    public void handleDeliverNotification(DeliverEntryNotification notification, short sourceProto) {
-//        logger.info("Delivered entry via BRB: UUID={} from sender={}",
-//                notification.getRequestID(),
-//                notification.getClientID());
+    public void handleDeliverNotification(DeliverBroadcastedEntryNotification notification, short sourceProto) {
+//        logger.info("Delivered entry via BRB: UUID={} from sender={}", notification.getRequestID(), notification.getClientID());
 
-        triggerNotification(notification);
+        try {
+            BroadcastRequest br = BroadcastRequest.deserialize(notification.getClientRequest());
+
+            DeliverEntryNotification den = new DeliverEntryNotification(UUID.fromString(br.getAppendReqId()), notification.getClientID(), br.getClientRequest(), null);
+
+            triggerNotification(den);
+        }catch (Exception e) {
+            logger.error(e.getMessage());
+        }
+
+
+
     }
 
 

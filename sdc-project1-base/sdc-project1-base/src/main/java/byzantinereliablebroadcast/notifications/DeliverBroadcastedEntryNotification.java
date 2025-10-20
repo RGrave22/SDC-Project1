@@ -9,7 +9,7 @@ import utils.SignaturesHelper;
 import java.security.*;
 import java.util.UUID;
 
-public class DeliverEntryNotification extends ProtoNotification {
+public class DeliverBroadcastedEntryNotification extends ProtoNotification {
 
     public static final short NOTIFICATION_ID = 1004;
 
@@ -19,7 +19,7 @@ public class DeliverEntryNotification extends ProtoNotification {
     private byte[] serverSignature;
 
 
-    public DeliverEntryNotification(UUID id, String clientID, byte[] bs, byte[] serverSign) {
+    public DeliverBroadcastedEntryNotification(UUID id, String clientID, byte[] bs, byte[] serverSign) {
         super(NOTIFICATION_ID);
         this.requestID = id;
         this.clientID = clientID;
