@@ -44,15 +44,12 @@ public class Crypto {
         return ks;
     }
 
-    //Encontramos isto num git com um exemplo de blockchain
     public static String applySha256(String input) {
         try {
 
             MessageDigest digest = MessageDigest.getInstance("SHA-256");
 
-
             byte[] hash = digest.digest(input.getBytes("UTF-8"));
-
 
             StringBuilder hexString = new StringBuilder();
             for (byte b : hash) {
@@ -62,7 +59,6 @@ public class Crypto {
                 }
                 hexString.append(hex);
             }
-
 
             return hexString.toString();
 

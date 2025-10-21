@@ -126,6 +126,34 @@ public class AppendRequest extends ProtoRequest {
 
     }
 
+    public static byte[] serialize2(AppendRequest msg, ByteBuf out) throws IOException {
+
+        out.writeLong(msg.getRequestID().getMostSignificantBits());
+        out.writeLong(msg.getRequestID().getLeastSignificantBits());
+
+        byte[] clientBytes = msg.getClientID().getBytes();
+        out.writeInt(clientBytes.length);
+        out.writeBytes(clientBytes);
+
+        Host.serializer.serialize(msg.source, out);
+
+        out.writeInt(msg.getClientRequest().length);
+        out.writeBytes(msg.getClientRequest());
+
+        if (msg.getServerSignature() != null) {
+            out.writeInt(msg.getServerSignature().length);
+            out.writeBytes(msg.getServerSignature());
+        } else {
+            out.writeInt(0);
+        }
+
+        out.writeLong(msg.getSeqNo());
+
+        byte[] result = new byte[out.readableBytes()];
+        out.readBytes(result);
+        return result;
+    }
+
     public static AppendRequest deserialize(ByteBuf in) throws IOException {
 
         UUID reqID = new UUID(in.readLong(), in.readLong());

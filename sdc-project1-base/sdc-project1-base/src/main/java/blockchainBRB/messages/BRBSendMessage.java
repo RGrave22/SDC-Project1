@@ -16,7 +16,8 @@ public class BRBSendMessage extends SignedProtoMessage {
     private final String messageId;
     private final byte[] payload;
 
-    public BRBSendMessage(Host me, String messageId, byte[]  payload){
+
+    public BRBSendMessage(Host me, String messageId, byte[]  payload) {
         super(MESSAGE_ID);
         this.myself = me;
         this.messageId = messageId;
@@ -35,7 +36,6 @@ public class BRBSendMessage extends SignedProtoMessage {
         return myself;
     }
 
-
     public final static SignedMessageSerializer<BRBSendMessage> serializer = new SignedMessageSerializer<BRBSendMessage>() {
 
         @Override
@@ -49,6 +49,7 @@ public class BRBSendMessage extends SignedProtoMessage {
 
             out.writeInt(m.getPayload().length);
             out.writeBytes(m.getPayload());
+
         }
 
         @Override
@@ -61,6 +62,8 @@ public class BRBSendMessage extends SignedProtoMessage {
 
             byte[] payload = new byte[in.readInt()];
             in.readBytes(payload);
+
+
 
             return new BRBSendMessage(h, messageId, payload);
         }

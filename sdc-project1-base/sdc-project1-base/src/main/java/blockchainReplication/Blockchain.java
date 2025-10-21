@@ -1,5 +1,6 @@
 package blockchainReplication;
 
+import PBFT.requests.AppendRequest;
 import app.messages.client.LogEntry;
 
 import java.util.ArrayList;
@@ -17,18 +18,18 @@ public class Blockchain {
         this.difficulty = difficulty;
 
         // Genesis block
-        List<LogEntry> logEntries = new ArrayList<>();
+        List<AppendRequest> logEntries = new ArrayList<>();
         String hash = "0";
         Block genesisBlock = new Block(hash, logEntries);
         genesisBlock.mineBlock(difficulty);
         blockchain.add(genesisBlock);
     }
 
-    public void addBlock(Block newBlock) {
-
-        newBlock.mineBlock(difficulty);
-        blockchain.add(newBlock);
-    }
+//    public void addBlock(Block newBlock) {
+//
+//        newBlock.mineBlock(difficulty);
+//        blockchain.add(newBlock);
+//    }
 
     public synchronized boolean addBlock(Block newBlock) {
         Block lastBlock = getLastBlock();

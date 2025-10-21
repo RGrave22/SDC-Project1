@@ -1,51 +1,37 @@
-package blockchainBRB.requests;
+package blockchainBRB.notifications;
 
 
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
-import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
-import pt.unl.fct.di.novasys.network.data.Host;
+import pt.unl.fct.di.novasys.babel.generic.ProtoNotification;
 import utils.SignaturesHelper;
 
-import java.io.IOException;
 import java.security.*;
 import java.util.UUID;
 
-public class AppendRequest extends ProtoRequest {
+public class DeliverBroadcastedEntryNotification extends ProtoNotification {
 
-    public static final short REQUEST_ID = 901;
+    public static final short NOTIFICATION_ID = 1004;
 
     private final UUID requestID;
     private final String clientID;
-    private Host source;
     private final byte[] clientRequest;
     private byte[] serverSignature;
 
 
-    public AppendRequest(String clientID, Host source, byte[] bs) {
-        super(REQUEST_ID);
-        this.requestID = UUID.randomUUID();
+    public DeliverBroadcastedEntryNotification(UUID id, String clientID, byte[] bs, byte[] serverSign) {
+        super(NOTIFICATION_ID);
+        this.requestID = id;
         this.clientID = clientID;
-        this.source = source;
         this.clientRequest = bs;
-        this.serverSignature = null;
+        this.serverSignature = serverSign;
     }
 
-    public AppendRequest(UUID requestID, String clientID, Host source, byte[] cr, byte[] ssign) {
-        super(REQUEST_ID);
-        this.requestID = requestID;
-        this.clientID = clientID;
-        this.source = source;
-        this.clientRequest = cr;
-        this.serverSignature = ssign;
-    }
-
-    public void sign(PrivateKey key) throws InvalidKeyException, NoSuchAlgorithmException, SignatureException, IOException {
+    public void sign(PrivateKey key) throws InvalidKeyException, NoSuchAlgorithmException, SignatureException {
         ByteBuf buf = Unpooled.buffer();
         buf.writeLong(requestID.getMostSignificantBits());
         buf.writeLong(requestID.getLeastSignificantBits());
         buf.writeBytes(clientID.getBytes());
-        Host.serializer.serialize(source, buf);
         buf.writeBytes(clientRequest);
 
         buf.resetReaderIndex();
@@ -55,12 +41,11 @@ public class AppendRequest extends ProtoRequest {
         serverSignature = SignaturesHelper.generateSignature(payload, key);
     }
 
-    public boolean checkSignature(PublicKey key) throws InvalidKeyException, SignatureException, NoSuchAlgorithmException, IOException {
+    public boolean checkSignature(PublicKey key) throws InvalidKeyException, SignatureException, NoSuchAlgorithmException {
         ByteBuf buf = Unpooled.buffer();
         buf.writeLong(requestID.getMostSignificantBits());
         buf.writeLong(requestID.getLeastSignificantBits());
         buf.writeBytes(clientID.getBytes());
-        Host.serializer.serialize(source, buf);
         buf.writeBytes(clientRequest);
 
         buf.resetReaderIndex();
@@ -87,4 +72,6 @@ public class AppendRequest extends ProtoRequest {
     }
 
 
+
 }
+
