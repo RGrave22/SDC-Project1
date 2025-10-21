@@ -18,7 +18,6 @@ import java.security.UnrecoverableKeyException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -173,15 +172,15 @@ public class LogManagerClient {
 		}
 
 		for (short i = 0; i < this.number_of_clients; i++) {
-			// System.err.println("Initializing client: " + this.clients[i].client_name);
+			 System.err.println("Initializing client: " + this.clients[i].client_name);
 			this.clients[i].init(props);
 		}
 
-		// System.err.println("Starting Babel.");
+	 System.err.println("Starting Babel.");
 		this.b.start();
 
 		for (short i = 0; i < this.number_of_clients; i++) {
-			// System.err.println("Starting client: " + this.clients[i].client_name);
+			 System.err.println("Starting client: " + this.clients[i].client_name);
 			this.clients[i].startClient();
 		}
 	}
@@ -264,7 +263,7 @@ public class LogManagerClient {
 				registerChannelEventHandler(clientChannel[i], ServerUpEvent.EVENT_ID, this::uponServerUp);
 				registerChannelEventHandler(clientChannel[i], ServerFailedEvent.EVENT_ID, this::uponServerFailed);
 
-				//System.err.println("Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
+				System.err.println("Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
 				openConnection(servers[i], clientChannel[i]);
 			}
 
@@ -292,7 +291,7 @@ public class LogManagerClient {
 		}
 		
 		public void executeOperation() {
-			//System.err.println(this.client_name + ": Generating new operation...");
+			System.err.println(this.client_name + ": Generating new operation...");
 
 			SignedProtoMessage request = null;
 			
@@ -332,7 +331,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
@@ -342,7 +341,7 @@ public class LogManagerClient {
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+			System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
 		

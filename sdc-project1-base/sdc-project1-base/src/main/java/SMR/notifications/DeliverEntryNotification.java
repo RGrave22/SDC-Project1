@@ -1,4 +1,4 @@
-package PBFT.notifications;
+package SMR.notifications;
 
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;

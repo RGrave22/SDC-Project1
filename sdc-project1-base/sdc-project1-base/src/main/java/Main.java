@@ -44,6 +44,7 @@ public class Main {
         DistributedLogManager dlm = new DistributedLogManager();
         SMReplicationProtocol rep = new SMReplicationProtocol();
         PBFTAgreement bcast = new PBFTAgreement();
+        rep.setAgreement(bcast);
 
         //To simplify lets use this protocol again
         StaticMembershipProtocol smp = new StaticMembershipProtocol();

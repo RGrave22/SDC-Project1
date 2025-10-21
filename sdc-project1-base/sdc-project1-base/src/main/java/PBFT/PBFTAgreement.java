@@ -8,24 +8,24 @@ import java.security.PublicKey;
 import java.security.SignatureException;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import PBFT.messages.CommitMessage;
 import PBFT.messages.NewViewMessage;
 import PBFT.messages.PrePrepareMessage;
 import PBFT.messages.PrepareMessage;
 import PBFT.messages.ViewChangeMessage;
-import PBFT.notifications.DeliverEntryNotification;
+import PBFT.notifications.CommitNotification;
 import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
 import common.events.ChannelAvailable;
-import common.events.NeighborDown;
-import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
 import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
@@ -40,17 +40,21 @@ public class PBFTAgreement extends GenericProtocol {
     private final Map<Long, PBFTLogEntry> log;
 
     private static final long PRIMARY_TIMEOUT = 5000;
+    private static final long PROGRESS_TIMEOUT = 10000;
     private long lastPrimaryResponseTime;
+    private long lastProgressTime;
 
     private final Map<Long, Set<Host>> viewChangeVotes;
     private final Map<Long, List<ViewChangeMessage>> receivedViewChanges;
+    private final Map<Long, List<PrepareMessage>> pendingPrepares = new ConcurrentHashMap<>();
+    private final Map<Long, List<CommitMessage>> pendingCommits = new ConcurrentHashMap<>();
     private final Set<Long> startedViews;
     private final Set<Long> sentViewChange;
     private PrivateKey privateKey;
-    private final Map<Host, PublicKey> publicKeys;
+    private Map<Host, PublicKey> publicKeys;
 
     private int channelID;
-    private final List<Host> neighbors;
+    private List<Host> neighbors;
     private Host self;
     private Host primary;
 
@@ -65,6 +69,7 @@ public class PBFTAgreement extends GenericProtocol {
         this.currentView = 0;
         this.log = new HashMap<>();
         this.lastPrimaryResponseTime = System.currentTimeMillis();
+        this.lastProgressTime = System.currentTimeMillis();
         this.viewChangeVotes = new HashMap<>();
         this.receivedViewChanges = new HashMap<>();
         this.startedViews = new HashSet<>();
@@ -73,18 +78,12 @@ public class PBFTAgreement extends GenericProtocol {
         this.neighbors = new ArrayList<>();
     }
 
-    private boolean amPrimary() {
-        return self != null && primary != null && primary.equals(self);
-    }
-
     @Override
     public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-        subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
-        subscribeNotification(NeighborUp.NOTIFICATION_ID, this::uponNeighborUpNotification);
-        subscribeNotification(NeighborDown.NOTIFICATION_ID, this::uponNeighborDownNotification);
-
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleRequest);
+
+        subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
 
     }
 
@@ -94,8 +93,8 @@ public class PBFTAgreement extends GenericProtocol {
         this.privateKey = notification.getMyPrivateKey();
         this.channelID = notification.getChannelID();
 
-        registerSharedChannel(this.channelID);
-        setDefaultChannel(this.channelID);
+        registerSharedChannel(channelID);
+        setDefaultChannel(channelID);
 
         //Register Message Serializers
         registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
@@ -119,18 +118,7 @@ public class PBFTAgreement extends GenericProtocol {
         } catch (HandlerRegistrationException e) {
             throw new RuntimeException("Erro ao iniciar mensagens.");
         }
-    }
 
-    public void uponNeighborUpNotification(NeighborUp notification, short sourceProtoID) {
-        this.neighbors.add(notification.getNeighbor());
-        this.publicKeys.put(notification.getNeighbor(), notification.getPublicKey());
-        f = (neighbors.size() - 1) / 3;
-    }
-
-    public void uponNeighborDownNotification(NeighborDown notification, short sourceProtoID) {
-        this.neighbors.remove(notification.getNeighbor());
-        this.publicKeys.remove(notification.getNeighbor());
-        f = Math.max((neighbors.size() - 1) / 3, 1);
     }
 
     public void handleRequest(AppendRequest req, short sourceProto) {
@@ -139,10 +127,42 @@ public class PBFTAgreement extends GenericProtocol {
         }
     }
 
+    public void updatePrimary() {
+        if (neighbors.isEmpty()) {
+            primary = null;
+            return;
+        }
+
+        List<Host> sortedNeighbors = new ArrayList<>(neighbors);
+        if (self != null) {
+            sortedNeighbors.add(self);
+        }
+        Collections.sort(sortedNeighbors);
+
+        Host newPrimary = sortedNeighbors.get((int) (currentView % sortedNeighbors.size()));
+        this.primary = newPrimary;
+        System.out.println("Primary atualizado: " + primary);
+    }
+
+    private boolean amPrimary() {
+        return self != null && primary != null && primary.equals(self);
+    }
+
     public void propose(AppendRequest req) {
+        System.err.println("Chega aqui: " + primary);
+        System.err.println("É primary: " + self);
         if (!amPrimary()) {
             return;
         }
+
+        boolean exists = log.values().stream()
+                .anyMatch(e -> Arrays.equals(e.getRequest().getClientRequest(), req.getClientRequest()));
+        if (exists) {
+            System.out.println("Pedido já existe no log, ignorando novo propose.");
+            return;
+        }
+
+        System.err.println("Chega aqui 2");
 
         long seq = ++seqNo;
         byte[] digest = SignaturesHelper.digest(req.getClientRequest());
@@ -151,6 +171,18 @@ public class PBFTAgreement extends GenericProtocol {
 
         PrePrepareMessage ppm = new PrePrepareMessage(self, currentView, seq, digest, req);
         broadcast(ppm);
+    }
+
+    public void setF(int newF) {
+        this.f = newF;
+    }
+
+    public void setNeighbor(List<Host> newNeighbors) {
+        this.neighbors = newNeighbors;
+    }
+
+    public void setPublicKeys(Map<Host, PublicKey> newPublickeys) {
+        this.publicKeys = newPublickeys;
     }
 
     private void broadcast(ProtoMessage msg) {
@@ -163,26 +195,62 @@ public class PBFTAgreement extends GenericProtocol {
 
     private void onPrePrepare(PrePrepareMessage msg, Host from) {
 
+        if (!from.equals(primary)) {
+            return;
+        }
+
+        System.out.println("Começa prePrepare");
+
         onMessageFromPrimary();
 
         byte[] digest = SignaturesHelper.digest(msg.getRequest().getClientRequest());
         if (!Arrays.equals(digest, msg.getDigest())) {
+            System.out.println("Digest incorreto");
+            startViewChange(currentView + 1);
+            return;
+        }
+
+        if (log.containsKey(msg.getSeq())) {
+            System.out.println("SeqNo já existente");
+            startViewChange(currentView + 1);
             return;
         }
 
         PBFTLogEntry entry = new PBFTLogEntry(msg.getSeq(), msg.getView(), msg.getRequest(), digest);
         log.put(msg.getSeq(), entry);
 
+        List<PrepareMessage> pendPrepares = pendingPrepares.remove(msg.getSeq());
+        if (pendPrepares != null) {
+            for (PrepareMessage pm : pendPrepares) {
+                onPrepare(pm, pm.getSender());
+            }
+        }
+
         PrepareMessage prepare = new PrepareMessage(msg.getView(), msg.getSeq(), digest, self);
         broadcast(prepare);
+
+        List<CommitMessage> pendCommits = pendingCommits.remove(msg.getSeq());
+        if (pendCommits != null) {
+            for (CommitMessage cm : pendCommits) {
+                onCommit(cm, cm.getSender());
+            }
+        }
+
     }
 
     private void onPrepare(PrepareMessage msg, Host from) {
 
+        System.out.println("KeySet: " + log.keySet());
+        System.out.println("Seq: " + msg.getSeq());
+
         PBFTLogEntry entry = log.get(msg.getSeq());
         if (entry == null) {
+            pendingPrepares.computeIfAbsent(msg.getSeq(), k -> new ArrayList<>()).add(msg);
             return;
         }
+
+        System.out.println("Req: " + entry.getRequest().getRequestID());
+        System.out.println("Começa Prepare");
 
         entry.addPrepare(from);
         if (entry.getPreparesCount() > 2 * f) {
@@ -193,22 +261,37 @@ public class PBFTAgreement extends GenericProtocol {
 
     private void onCommit(CommitMessage msg, Host from) {
 
+        System.out.println("Começa commit: " + msg.getSeq());
+
         PBFTLogEntry entry = log.get(msg.getSeq());
         if (entry == null) {
+            pendingCommits.computeIfAbsent(msg.getSeq(), k -> new ArrayList<>()).add(msg);
             return;
         }
 
+        System.out.println("Req: " + entry.getRequest().getRequestID());
+        System.out.println("F: " + ((2 * f) + 1));
+        System.out.println("Commit Count: " + entry.getCommitsCount());
+        System.out.println("IsDelivered: " + entry.isDelivered());
+
         entry.addCommit(from);
-        if (entry.getCommitsCount() >= 2 * f + 1 && !entry.isDelivered()) {
+
+        System.out.println("Commit Count (depois): " + entry.getCommitsCount());
+
+        if (entry.getCommitsCount() >= ((2 * f) + 1) && !entry.isDelivered()) {
             entry.markDelivered();
             AppendRequest req = entry.getRequest();
-            triggerNotification(new DeliverEntryNotification(
-                    req.getRequestID(),
-                    req.getClientID(),
-                    req.getClientRequest(),
-                    req.getServerSignature(),
-                    entry.getSeq()
-            ));
+            lastProgressTime = System.currentTimeMillis();
+            triggerNotification(new CommitNotification(entry.getSeq(), req));
+
+        } else if (!entry.hasCommitFrom(self) && !entry.isDelivered()) {
+            CommitMessage myCommit = new CommitMessage(
+                    msg.getView(),
+                    msg.getSeq(),
+                    msg.getDigest(),
+                    self
+            );
+            broadcast(myCommit);
         }
     }
 
@@ -347,7 +430,9 @@ public class PBFTAgreement extends GenericProtocol {
     }
 
     public void checkPrimaryTimeout() {
-        if (!amPrimary() && System.currentTimeMillis() - lastPrimaryResponseTime > PRIMARY_TIMEOUT) {
+        boolean noPrimaryResponse = (System.currentTimeMillis() - lastPrimaryResponseTime > PRIMARY_TIMEOUT);
+        boolean noProgress = (System.currentTimeMillis() - lastProgressTime > PROGRESS_TIMEOUT);
+        if (!amPrimary() && neighbors.isEmpty() && (noPrimaryResponse || noProgress)) {
             startViewChange(currentView + 1);
         }
     }

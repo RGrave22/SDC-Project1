@@ -16,8 +16,8 @@ import org.apache.commons.lang3.tuple.Pair;
 import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
-import PBFT.notifications.DeliverEntryNotification;
 import PBFT.requests.AppendRequest;
+import SMR.notifications.DeliverEntryNotification;
 import app.messages.client.AppendToLog;
 import app.messages.client.AppendToLogReply;
 import app.messages.client.LogEntry;
@@ -139,6 +139,8 @@ public class DistributedLogManager extends GenericProtocol {
             req.sign(privateKey);
 
             pendingAppendRequests.put(req.getRequestID(), Pair.of(from, sourceProto));
+
+            System.err.println("A Enviar...");
 
             sendRequest(req, underlyingProtocolID);
 

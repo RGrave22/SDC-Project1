@@ -14,14 +14,16 @@ public class PBFTLogEntry {
     private final AppendRequest request;
     private final byte[] digest;
 
-    private final Set<Host> prepares = new HashSet<>();
-    private final Set<Host> commits = new HashSet<>();
+    private final Set<Host> prepares;
+    private final Set<Host> commits;
     private boolean delivered = false;
 
     public PBFTLogEntry(long seq, long view, AppendRequest request, byte[] digest) {
         this.seq = seq;
         this.view = view;
         this.request = request;
+        this.prepares = new HashSet<>();
+        this.commits = new HashSet<>();
         this.digest = digest;
     }
 
@@ -68,4 +70,14 @@ public class PBFTLogEntry {
     public boolean matchesDigest(byte[] otherDigest) {
         return Arrays.equals(digest, otherDigest);
     }
+
+    @Override
+    public String toString() {
+        return "PBFTLogEntry(seq=" + seq + ", prepares=" + prepares.size() + ", commits=" + commits.size() + ")";
+    }
+
+    public boolean hasCommitFrom(Host h) {
+        return commits.contains(h);
+    }
+
 }
