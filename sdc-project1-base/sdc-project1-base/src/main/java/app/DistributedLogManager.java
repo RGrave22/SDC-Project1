@@ -136,8 +136,6 @@ public class DistributedLogManager extends GenericProtocol {
 
 	public void handleAppendToLogMessage(AppendToLog msg, Host from, short sourceProto, int channelID) {
 		try {
-            //troquei o contrutor para manter o ID do Append to Log
-			//AppendRequest req = new AppendRequest(msg.getRequestID(), msg.getClientID(), myself, msg.serializeRequest(), null);
             AppendRequest req = new AppendRequest(msg.getClientID(), myself, msg.serializeRequest());
             req.sign(privateKey);
 
