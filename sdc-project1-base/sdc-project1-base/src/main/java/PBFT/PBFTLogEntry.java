@@ -73,7 +73,7 @@ public class PBFTLogEntry {
 
     @Override
     public String toString() {
-        return "PBFTLogEntry(seq=" + seq + ", prepares=" + prepares.size() + ", commits=" + commits.size() + ")";
+        return "PBFTLogEntry (seq=" + seq + ", prepares=" + prepares.size() + ", commits=" + commits.size() + ")";
     }
 
     public boolean hasCommitFrom(Host h) {

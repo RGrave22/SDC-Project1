@@ -25,6 +25,7 @@ import app.messages.client.ReadLogEntryReply;
 import app.messages.client.ReadLogEntryRequest;
 import app.messages.client.SubscribeToLog;
 import common.events.ChannelAvailable;
+import common.events.NeighborDown;
 import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -118,18 +119,22 @@ public class DistributedLogManager extends GenericProtocol {
         subscribeNotification(DeliverEntryNotification.NOTIFICATION_ID, this::handleDeliverEntryNotification);
         subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
         subscribeNotification(NeighborUp.NOTIFICATION_ID, this::handleNeighborUpNotification);
+        subscribeNotification(NeighborDown.NOTIFICATION_ID, this::handleNeighborDownNotification);
     }
 
     public void handleChannelAvailableNotification(ChannelAvailable not, short sourceProto) {
         this.myself = not.getMyHost();
         this.privateKey = not.getMyPrivateKey();
         this.publicKey = not.getMyPublicKey();
-
         this.publicKeys.put(myself, publicKey);
     }
 
     public void handleNeighborUpNotification(NeighborUp not, short protoSource) {
         this.publicKeys.put(not.getNeighbor(), not.getPublicKey());
+    }
+
+    public void handleNeighborDownNotification(NeighborDown not, short protoSource) {
+        this.publicKeys.remove(not.getNeighbor());
     }
 
     public void handleAppendToLogMessage(AppendToLog msg, Host from, short sourceProto, int channelID) {
@@ -211,7 +216,7 @@ public class DistributedLogManager extends GenericProtocol {
     public void handleReadLogEntryRequestMessage(ReadLogEntryRequest msg, Host from, short sourceProto, int channelID) {
         try {
 
-			long index = msg.getEntryLogIndex();
+            long index = msg.getEntryLogIndex();
             if (this.logEntries.containsKey(index)) {
 
                 ReadLogEntryReply readReply = new ReadLogEntryReply(index,

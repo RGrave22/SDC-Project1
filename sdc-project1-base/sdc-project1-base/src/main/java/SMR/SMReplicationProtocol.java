@@ -122,7 +122,7 @@ public class SMReplicationProtocol extends GenericProtocol {
 
         pendingRequests.remove(req.getRequestID());
 
-        tryApplyPending(seqNo);
+        tryApplyPending();
 
     }
 
@@ -132,9 +132,16 @@ public class SMReplicationProtocol extends GenericProtocol {
 
     private void onNewView(NewViewNotification notification, short sourceProto) {
 
+        System.out.println("Nova view " + notification.getNewView() + ". A re-submeter " + pendingRequests.size() + " pedidos pendentes.");
+
+        if (agreement != null) {
+            for (AppendRequest req : pendingRequests.values()) {
+                sendRequest(req, underlyingProtocolID);
+            }
+        }
     }
 
-    private void tryApplyPending(long seqNo) {
+    private void tryApplyPending() {
 
         long next = lastApplied + 1;
 
@@ -148,7 +155,7 @@ public class SMReplicationProtocol extends GenericProtocol {
             lastApplied = next;
 
             triggerNotification(new DeliverEntryNotification(req.getRequestID(), req.getClientID(),
-                    req.getClientRequest(), req.getServerSignature(), seqNo));
+                    req.getClientRequest(), req.getServerSignature(), next));
 
             next++;
         }

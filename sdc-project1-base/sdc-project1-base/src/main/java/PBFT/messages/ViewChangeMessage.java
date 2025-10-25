@@ -1,7 +1,5 @@
 package PBFT.messages;
 
-import java.io.ByteArrayOutputStream;
-import java.io.DataOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -19,12 +17,10 @@ public class ViewChangeMessage extends SignedProtoMessage {
     private final List<CommitMessage> doneOper;
     private final List<PrePrepareMessage> notDoneOper;
     private final Host replica;
-    private byte[] sign;
 
-    public ViewChangeMessage(long view, Host replica, byte[] signature, List<CommitMessage> doneOper, List<PrePrepareMessage> notDoneOper) {
+    public ViewChangeMessage(long view, Host replica, List<CommitMessage> doneOper, List<PrePrepareMessage> notDoneOper) {
         super(MESSAGE_ID);
         this.novaView = view;
-        this.sign = signature;
         this.replica = replica;
         this.doneOper = doneOper;
         this.notDoneOper = notDoneOper;
@@ -32,14 +28,6 @@ public class ViewChangeMessage extends SignedProtoMessage {
 
     public long getNovaView() {
         return novaView;
-    }
-
-    public byte[] getSign() {
-        return sign;
-    }
-
-    public void setSign(byte[] signature) {
-        this.sign = signature;
     }
 
     public Host getReplica() {
@@ -81,11 +69,6 @@ public class ViewChangeMessage extends SignedProtoMessage {
                 out.writeInt(0);
             }
 
-            out.writeInt(m.sign == null ? 0 : m.sign.length);
-            if (m.sign != null) {
-                out.writeBytes(m.sign);
-            }
-
         }
 
         @Override
@@ -107,13 +90,7 @@ public class ViewChangeMessage extends SignedProtoMessage {
                 notDoneOper.add(PrePrepareMessage.serializer.deserialize(in));
             }
 
-            int len = in.readInt();
-            byte[] signature = new byte[len];
-            if (len > 0) {
-                in.readBytes(signature);
-            }
-
-            return new ViewChangeMessage(novaView, replica, signature, doneOper, notDoneOper);
+            return new ViewChangeMessage(novaView, replica, doneOper, notDoneOper);
         }
 
     };
@@ -121,40 +98,5 @@ public class ViewChangeMessage extends SignedProtoMessage {
     @Override
     public SignedMessageSerializer<? extends SignedProtoMessage> getSerializer() {
         return ViewChangeMessage.serializer;
-    }
-
-    public static byte[] getBytesForSigning(ViewChangeMessage msg) {
-        ByteArrayOutputStream bos = new ByteArrayOutputStream();
-        DataOutputStream dos = new DataOutputStream(bos);
-
-        try {
-            dos.writeLong(msg.getNovaView());
-
-            dos.writeUTF(msg.getReplica().toString());
-
-            if (msg.getDoneOper() != null) {
-                dos.writeInt(msg.getDoneOper().size());
-                for (CommitMessage cm : msg.getDoneOper()) {
-                    dos.write(cm.getDigest());
-                }
-            } else {
-                dos.writeInt(0);
-            }
-
-            if (msg.getNotDoneOper() != null) {
-                dos.writeInt(msg.getNotDoneOper().size());
-                for (PrePrepareMessage ppm : msg.getNotDoneOper()) {
-                    dos.write(ppm.getDigest());
-                }
-            } else {
-                dos.writeInt(0);
-            }
-
-            dos.flush();
-
-        } catch (IOException ex) {
-            throw new RuntimeException("Erro ao gerar assinatura para view message.");
-        }
-        return bos.toByteArray();
     }
 }

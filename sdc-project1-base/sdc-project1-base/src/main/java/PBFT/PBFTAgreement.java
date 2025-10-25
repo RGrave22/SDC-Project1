@@ -18,6 +18,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 import PBFT.messages.CommitMessage;
+import PBFT.messages.FowardAppendMessage;
 import PBFT.messages.NewViewMessage;
 import PBFT.messages.PrePrepareMessage;
 import PBFT.messages.PrepareMessage;
@@ -28,7 +29,10 @@ import PBFT.requests.AppendRequest;
 import common.events.ChannelAvailable;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
-import pt.unl.fct.di.novasys.babel.generic.ProtoMessage;
+import pt.unl.fct.di.novasys.babel.generic.signed.InvalidFormatException;
+import pt.unl.fct.di.novasys.babel.generic.signed.InvalidSerializerException;
+import pt.unl.fct.di.novasys.babel.generic.signed.NoSignaturePresentException;
+import pt.unl.fct.di.novasys.babel.generic.signed.SignedProtoMessage;
 import pt.unl.fct.di.novasys.network.data.Host;
 import utils.SignaturesHelper;
 
@@ -96,15 +100,16 @@ public class PBFTAgreement extends GenericProtocol {
         registerSharedChannel(channelID);
         setDefaultChannel(channelID);
 
-        // Register Message Serializers
+        registerMessageSerializer(channelID, FowardAppendMessage.MESSAGE_ID, FowardAppendMessage.serializer);
         registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
         registerMessageSerializer(channelID, PrepareMessage.MESSAGE_ID, PrepareMessage.serializer);
         registerMessageSerializer(channelID, CommitMessage.MESSAGE_ID, CommitMessage.serializer);
         registerMessageSerializer(channelID, ViewChangeMessage.MESSAGE_ID, ViewChangeMessage.serializer);
         registerMessageSerializer(channelID, NewViewMessage.MESSAGE_ID, NewViewMessage.serializer);
 
-        // Setup Message Handlers
         try {
+            registerMessageHandler(channelID, FowardAppendMessage.MESSAGE_ID,
+                    (msg, from, srcProto, channel) -> onFowardReq((FowardAppendMessage) msg, from));
             registerMessageHandler(channelID, PrePrepareMessage.MESSAGE_ID,
                     (msg, from, srcProto, channel) -> onPrePrepare((PrePrepareMessage) msg, from));
             registerMessageHandler(channelID, PrepareMessage.MESSAGE_ID,
@@ -124,6 +129,12 @@ public class PBFTAgreement extends GenericProtocol {
     public void handleRequest(AppendRequest req, short sourceProto) {
         if (amPrimary()) {
             propose(req);
+        } else {
+            System.out.println("Não sou o líder, a encaminhar para " + primary);
+            byte[] digest = SignaturesHelper.digest(req.getClientRequest());
+            FowardAppendMessage fwdMsg = new FowardAppendMessage(req, digest, self);
+            this.sign(fwdMsg);
+            sendMessage(fwdMsg, primary);
         }
     }
 
@@ -149,6 +160,14 @@ public class PBFTAgreement extends GenericProtocol {
         return self != null && primary != null && primary.equals(self);
     }
 
+    private void sign(SignedProtoMessage msg) {
+        try {
+            msg.signMessage(privateKey);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidSerializerException e) {
+            throw new RuntimeException("Erro ao assinar FowardAppendMessage", e);
+        }
+    }
+
     public void propose(AppendRequest req) {
         System.err.println("Chega aqui: " + primary);
         System.err.println("É primary: " + self);
@@ -159,7 +178,7 @@ public class PBFTAgreement extends GenericProtocol {
         boolean exists = log.values().stream()
                 .anyMatch(e -> Arrays.equals(e.getRequest().getClientRequest(), req.getClientRequest()));
         if (exists) {
-            System.out.println("Pedido já existe no log, ignorando novo propose.");
+            System.out.println("Pedido já existe no log, a ignorar novo propose.");
             return;
         }
 
@@ -171,6 +190,7 @@ public class PBFTAgreement extends GenericProtocol {
         log.put(seq, entry);
 
         PrePrepareMessage ppm = new PrePrepareMessage(self, currentView, seq, digest, req);
+
         broadcast(ppm);
     }
 
@@ -186,17 +206,67 @@ public class PBFTAgreement extends GenericProtocol {
         this.publicKeys = newPublickeys;
     }
 
-    private void broadcast(ProtoMessage msg) {
+    private void broadcast(SignedProtoMessage msg) {
+
+        this.sign(msg);
+
         for (Host h : neighbors) {
-            if (!h.equals(self)) {
-                sendMessage(msg, h);
-            }
+            sendMessage(msg, h);
         }
+        sendLocalMessage(msg);
+    }
+
+    private void sendLocalMessage(SignedProtoMessage msg) {
+        if (msg instanceof PrePrepareMessage) {
+            onPrePrepare((PrePrepareMessage) msg, self);
+        }
+        if (msg instanceof PrepareMessage) {
+            onPrepare((PrepareMessage) msg, self);
+        }
+        if (msg instanceof CommitMessage) {
+            onCommit((CommitMessage) msg, self);
+        }
+        if (msg instanceof ViewChangeMessage) {
+            onViewChange((ViewChangeMessage) msg, self);
+        }
+        if (msg instanceof NewViewMessage) {
+            onNewView((NewViewMessage) msg, self);
+        }
+    }
+
+    private void onFowardReq(FowardAppendMessage msg, Host from) {
+
+        try {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
+                return;
+            }
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura de FowardAppendMessage: " + e.getMessage());
+            return;
+        }
+
+        if (amPrimary()) {
+            handleRequest(msg.getRequest(), PROTO_ID);
+        }
+
     }
 
     private void onPrePrepare(PrePrepareMessage msg, Host from) {
 
         if (!from.equals(primary)) {
+            return;
+        }
+
+        try {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
+                return;
+            }
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
             return;
         }
 
@@ -228,6 +298,7 @@ public class PBFTAgreement extends GenericProtocol {
         }
 
         PrepareMessage prepare = new PrepareMessage(msg.getView(), msg.getSeq(), digest, self);
+
         broadcast(prepare);
 
         List<CommitMessage> pendCommits = pendingCommits.remove(msg.getSeq());
@@ -243,6 +314,17 @@ public class PBFTAgreement extends GenericProtocol {
 
         System.out.println("KeySet: " + log.keySet());
         System.out.println("Seq: " + msg.getSeq());
+
+        try {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
+                return;
+            }
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            return;
+        }
 
         PBFTLogEntry entry = log.get(msg.getSeq());
         if (entry == null) {
@@ -263,6 +345,17 @@ public class PBFTAgreement extends GenericProtocol {
     private void onCommit(CommitMessage msg, Host from) {
 
         System.out.println("Começa commit: " + msg.getSeq());
+
+        try {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
+                return;
+            }
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            return;
+        }
 
         PBFTLogEntry entry = log.get(msg.getSeq());
         if (entry == null) {
@@ -291,6 +384,11 @@ public class PBFTAgreement extends GenericProtocol {
                     msg.getSeq(),
                     msg.getDigest(),
                     self);
+            try {
+                myCommit.signMessage(privateKey);
+            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidSerializerException e) {
+                throw new RuntimeException("Erro ao assinar PrePrepareMessage", e);
+            }
             broadcast(myCommit);
         }
     }
@@ -298,12 +396,13 @@ public class PBFTAgreement extends GenericProtocol {
     public void onViewChange(ViewChangeMessage msg, Host from) {
 
         try {
-            PublicKey pub = publicKeys.get(from);
-            byte[] data = ViewChangeMessage.getBytesForSigning(msg);
-            if (pub == null || !SignaturesHelper.checkSignature(data, msg.getSign(), pub)) {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
                 return;
             }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
             return;
         }
 
@@ -316,7 +415,6 @@ public class PBFTAgreement extends GenericProtocol {
 
         System.err.println("View Change votes for view " + v + ": " + votes.size());
 
-        // devia ser 2f
         if (votes.size() >= (2 * f + 1)) {
 
             if (v > currentView) {
@@ -329,9 +427,7 @@ public class PBFTAgreement extends GenericProtocol {
                 startedViews.add(v);
                 startNewView(v);
             }
-        }
-
-        else if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
+        } else if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
             startViewChange(v);
             sentViewChange.add(v);
         }
@@ -342,18 +438,7 @@ public class PBFTAgreement extends GenericProtocol {
         List<PrePrepareMessage> prePrePare = collectPendingPrePrepares(v);
         List<CommitMessage> commits = collectCommits(v);
 
-        byte[] sign = null;
-
-        ViewChangeMessage vcm = new ViewChangeMessage(v, self, sign, commits, prePrePare);
-
-        try {
-            byte[] data = ViewChangeMessage.getBytesForSigning(vcm);
-            sign = SignaturesHelper.generateSignature(data, privateKey);
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
-            throw new RuntimeException("Erro ao assinar a mensagem", e);
-        }
-
-        vcm.setSign(sign);
+        ViewChangeMessage vcm = new ViewChangeMessage(v, self, commits, prePrePare);
 
         System.out.println("A iniciar view change para a view: " + self);
 
@@ -365,18 +450,7 @@ public class PBFTAgreement extends GenericProtocol {
         List<ViewChangeMessage> vChanges = receivedViewChanges.get(v);
         List<PrePrepareMessage> prePrepares = collectPendingPrePrepares(v);
 
-        byte[] sign = null;
-
-        NewViewMessage nvm = new NewViewMessage(v, vChanges, prePrepares, sign);
-
-        try {
-            byte[] data = NewViewMessage.getBytesForSigning(nvm);
-            sign = SignaturesHelper.generateSignature(data, privateKey);
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
-            throw new RuntimeException("Erro ao assinar a mensagem new view message", e);
-        }
-
-        nvm.setSign(sign);
+        NewViewMessage nvm = new NewViewMessage(v, vChanges, prePrepares);
 
         broadcast(nvm);
 
@@ -384,9 +458,10 @@ public class PBFTAgreement extends GenericProtocol {
 
         triggerNotification(new NewViewNotification(v));
 
-        for (PBFTLogEntry entry : log.values()) {
-            if (!entry.isDelivered()) {
-                propose(entry.getRequest());
+        if (prePrepares != null) {
+            for (PrePrepareMessage ppm : prePrepares) {
+                PrePrepareMessage myPpm = new PrePrepareMessage(self, currentView, ppm.getSeq(), ppm.getDigest(), ppm.getRequest());
+                broadcast(myPpm);
             }
         }
 
@@ -395,12 +470,13 @@ public class PBFTAgreement extends GenericProtocol {
     public void onNewView(NewViewMessage msg, Host from) {
 
         try {
-            PublicKey pub = publicKeys.get(from);
-            byte[] data = NewViewMessage.getBytesForSigning(msg);
-            if (pub == null || !SignaturesHelper.checkSignature(data, msg.getSign(), pub)) {
+            PublicKey senderKey = publicKeys.get(from);
+            if (!msg.checkSignature(senderKey)) {
+                System.out.println("Assinatura inválida de " + from);
                 return;
             }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException e) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
             return;
         }
 
