@@ -14,6 +14,8 @@ import PBFT.notifications.DeliverEntryNotification;
 import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
 import app.messages.client.LogEntry;
+import blockchainBRB.notifications.DeliverBroadcastedEntryNotification;
+import blockchainBRB.requests.BroadcastRequest;
 import blockchainReplication.timers.ViewChangeTimer;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -43,7 +45,7 @@ public class BlockchainReplication extends GenericProtocol {
     @Override
     public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-        this.agreement = new PBFTAgreement();
+        //this.agreement = new PBFTAgreement();
 
         registerRequestHandler(AppendRequest.REQUEST_ID, this::onAppend);
 
@@ -57,6 +59,8 @@ public class BlockchainReplication extends GenericProtocol {
 //            agreement.checkPrimaryTimeout();
 //        });
 
+
+
     }
 
     private void onAppend(AppendRequest req, short fromProto) {
@@ -68,29 +72,57 @@ public class BlockchainReplication extends GenericProtocol {
     }
 
     private void sendBlock() {
-        List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
-        pendingRequests.clear();
+        try {
+            List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
+            //pendingRequests.clear();
 
-        Block lastBlock = blockchain.getLastBlock();
-        Block newBlock = new Block(lastBlock.getHash(), toInclude);
+            Block lastBlock = blockchain.getLastBlock();
+            Block newBlock = new Block(lastBlock.getHash(), toInclude);
 
-        // Aqui você submeteria o bloco ao acordo da camada blockchain do Babel
-        // Por exemplo, enviar para consenso, e após confirmado, adicionar localmente
-        // Simulamos consenso imediato:
-        //boolean accepted = blockchain.addBlock(newBlock);
 
-        if (accepted) {
-            deliverStableEntries();
+            // Simulamos consenso imediato:
+
+
+            //if (accepted) {
+                //Não sei bem como colocar o id, mas pronto (pus tudo do ultimo pedido da lista do bloco)
+            AppendRequest lastRequest = newBlock.getEntries().getLast();
+            BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), newBlock.serialize());
+            //}
+
+        }catch (IOException e){
+            System.out.println("Error: " + e.getMessage());
         }
     }
 
-    private void onDeliverEntry(DeliverEntryNotification notification, short sourceProto) {
+    private void onDeliverEntry(DeliverBroadcastedEntryNotification notification, short sourceProto) {
 
-        AppendRequest req = new AppendRequest(notification.getRequestID(), notification.getClientID(), null, notification.getClientRequest(), notification.getServerSignature(), notification.getSeqNo());
+        try {
 
-        log.put(notification.getSeqNo(), req);
+            Block block = Block.deserialize(notification.getClientRequest());
 
-        pendingRequests.remove(req.getRequestID());
+            boolean validate = blockchain.addBlock(block);
+
+            if(validate) {
+                List<AppendRequest> toRemove = block.getEntries();
+                for(AppendRequest appendRequest : toRemove) {
+                    pendingRequests.remove(appendRequest.getRequestID());
+
+                    wait(1000);
+                    //Acho que esta mal criada
+                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+                    triggerNotification(deliverEntryNotification);
+                }
+
+
+            }
+
+
+
+        }catch (IOException e){
+            System.out.println("Error: " + e.getMessage());
+        } catch (InterruptedException e) {
+            throw new RuntimeException(e);
+        }
 
     }
 
