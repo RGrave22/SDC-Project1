@@ -83,16 +83,17 @@ public class SMReplicationProtocol extends GenericProtocol {
         this.publicKeys.put(h, notification.getPublicKey());
         this.f = Math.max((neighbors.size() - 1) / 3, 1);
         if (agreement != null) {
+            System.err.println("Neighbor up detected. Updating PBFTAgreement.");
             agreement.setF(f);
             agreement.setNeighbor(new ArrayList<>(neighbors));
             agreement.setPublicKeys(new HashMap<>(publicKeys));
-            agreement.updatePrimary();
         }
     }
 
     public void uponNeighborDownNotification(NeighborDown notification, short sourceProtoID) {
         Host h = notification.getNeighbor();
-        if (neighbors.size() > 4 && neighbors.contains(h)) {
+        System.err.println("Neighbor down detected. Updating PBFTAgreement.");
+        if (neighbors.size() > 3 && neighbors.contains(h)) {
             this.neighbors.remove(h);
             this.publicKeys.remove(h);
             this.f = Math.max((neighbors.size() - 1) / 3, 1);
@@ -100,7 +101,6 @@ public class SMReplicationProtocol extends GenericProtocol {
                 agreement.setF(f);
                 agreement.setNeighbor(new ArrayList<>(neighbors));
                 agreement.setPublicKeys(new HashMap<>(publicKeys));
-                agreement.updatePrimary();
             }
         }
     }
@@ -147,7 +147,8 @@ public class SMReplicationProtocol extends GenericProtocol {
 
             lastApplied = next;
 
-            triggerNotification(new DeliverEntryNotification(req.getRequestID(), req.getClientID(), req.getClientRequest(), req.getServerSignature(), seqNo));
+            triggerNotification(new DeliverEntryNotification(req.getRequestID(), req.getClientID(),
+                    req.getClientRequest(), req.getServerSignature(), seqNo));
 
             next++;
         }

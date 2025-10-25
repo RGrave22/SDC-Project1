@@ -54,9 +54,9 @@ public class LogManagerClient {
 	// Sets the log4j (logging library) configuration file and forces IPV4
 	static {
 		System.setProperty("log4j.configurationFile", "log4j2.xml");
-		System.setProperty("java.net.preferIPv4Stack" , "true");
+		System.setProperty("java.net.preferIPv4Stack", "true");
 	}
-	
+
 	private static final Logger logger = LogManager.getLogger(LogManagerClient.class);
 
 	public final static String INTERFACE = "interface";
@@ -70,9 +70,9 @@ public class LogManagerClient {
 	private short initial_port;
 	private short number_of_clients;
 
-    public final static String APP_SERVER_PROTO = "server_proto";
-    private short application_proto_number;
-	
+	public final static String APP_SERVER_PROTO = "server_proto";
+	private short application_proto_number;
+
 	public final static String OPERATION_TIMEOUT = "operation_timeout";
 
 	public final static String KEY_STORE_FILE = "key_store";
@@ -84,7 +84,7 @@ public class LogManagerClient {
 	private long report_period; // miliseconds;
 
 	public final static float probability_to_read = (float) 0.05;
-	
+
 	private long operation_timeout;
 
 	private KeyStore keystore;
@@ -136,7 +136,7 @@ public class LogManagerClient {
 		this.number_of_clients = Short.parseShort(props.getProperty(NUMBER_OF_CLIENTS));
 
 		this.application_proto_number = Short.parseShort(props.getProperty(APP_SERVER_PROTO));
-		
+
 		this.operation_timeout = Long.parseLong(props.getProperty(OPERATION_TIMEOUT));
 
 		this.report_period = Long.parseLong(props.getProperty(STATS_PERIOD));
@@ -172,15 +172,15 @@ public class LogManagerClient {
 		}
 
 		for (short i = 0; i < this.number_of_clients; i++) {
-			 System.err.println("Initializing client: " + this.clients[i].client_name);
+			System.err.println("Initializing client: " + this.clients[i].client_name);
 			this.clients[i].init(props);
 		}
 
-	 System.err.println("Starting Babel.");
+		System.err.println("Starting Babel.");
 		this.b.start();
 
 		for (short i = 0; i < this.number_of_clients; i++) {
-			 System.err.println("Starting client: " + this.clients[i].client_name);
+			System.err.println("Starting client: " + this.clients[i].client_name);
 			this.clients[i].startClient();
 		}
 	}
@@ -204,13 +204,12 @@ public class LogManagerClient {
 		private Measurements m;
 
 		private EventLoopGroup nm;
-		
+
 		private UUID currentRequest;
 		private long timeoutTimerID;
 		private long lastEntryObserved;
 		private long startExecution;
-		
-		
+
 		private static final String APPEND_OP_ID = "Append";
 		private static final String READ_OP_ID = "Read";
 
@@ -230,11 +229,11 @@ public class LogManagerClient {
 			this.r = new Random(System.currentTimeMillis());
 
 			this.m = m;
-			
+
 			this.timeoutTimerID = -1;
 			this.lastEntryObserved = 0;
 		}
-		
+
 		@Override
 		public void init(Properties props) throws HandlerRegistrationException, IOException {
 			clientChannel = new int[servers.length];
@@ -254,27 +253,27 @@ public class LogManagerClient {
 				registerMessageSerializer(clientChannel[i], AppendToLogReply.MESSAGE_ID, AppendToLogReply.serializer);
 				registerMessageSerializer(clientChannel[i], ReadLogEntryReply.MESSAGE_ID, ReadLogEntryReply.serializer);
 				registerMessageSerializer(clientChannel[i], LogEntry.MESSAGE_ID, LogEntry.serializer);
-					
+
 				registerMessageHandler(clientChannel[i], AppendToLogReply.MESSAGE_ID, this::handleAppentToLogReply);
 				registerMessageHandler(clientChannel[i], ReadLogEntryReply.MESSAGE_ID, this::handleReadLogEntryReply);
 				registerMessageHandler(clientChannel[i], LogEntry.MESSAGE_ID, this::handleLogEntry);
-				
+
 				registerChannelEventHandler(clientChannel[i], ServerDownEvent.EVENT_ID, this::uponServerDown);
 				registerChannelEventHandler(clientChannel[i], ServerUpEvent.EVENT_ID, this::uponServerUp);
 				registerChannelEventHandler(clientChannel[i], ServerFailedEvent.EVENT_ID, this::uponServerFailed);
 
-				System.err.println("Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
+				System.err.println(
+						"Client " + client_name + " opening connection to " + servers[i] + " on channel " + clientChannel[i]);
 				openConnection(servers[i], clientChannel[i]);
 			}
 
-			
 			registerTimerHandler(ExpiredOperation.TIMER_ID, this::handleExpiredOperationTimer);
 
-			this.myPrimaryChannel = clientChannel[(client_id -1) % servers.length];
-			this.myPrimaryServer = servers[(client_id -1) % servers.length];
+			this.myPrimaryChannel = clientChannel[(client_id - 1) % servers.length];
+			this.myPrimaryServer = servers[(client_id - 1) % servers.length];
 		}
 
-		public void startClient() {	
+		public void startClient() {
 			SubscribeToLog request = new SubscribeToLog(client_name, 0);
 			try {
 				request.signMessage(key);
@@ -284,25 +283,29 @@ public class LogManagerClient {
 				e.printStackTrace();
 				return;
 			}
-			
+
 			sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
-			
+
 			executeOperation();
 		}
-		
+
 		public void executeOperation() {
 			System.err.println(this.client_name + ": Generating new operation...");
 
 			SignedProtoMessage request = null;
-			
-			if(r.nextFloat() <= LogManagerClient.probability_to_read) {
-				request = new ReadLogEntryRequest(client_name, this.lastEntryObserved >= 1 ? r.nextInt((int) this.lastEntryObserved) : 1);
-				currentRequest = ((ReadLogEntryRequest)request).getRequestID();
+
+			if (r.nextFloat() <= LogManagerClient.probability_to_read) {
+				request = new ReadLogEntryRequest(client_name,
+						this.lastEntryObserved >= 1 ? r.nextInt((int) this.lastEntryObserved) : 1);
+				System.err.println(this.client_name + ": Generating new operation with read request for index "
+						+ ((ReadLogEntryRequest) request).getEntryLogIndex());
+				currentRequest = ((ReadLogEntryRequest) request).getRequestID();
 			} else {
-				 request = new AppendToLog(client_name, "Generated values: " + r.nextLong() + " :: " + r.nextLong() + " :: " + r.nextLong());
-				 currentRequest = ((AppendToLog)request).getRequestID();
+				request = new AppendToLog(client_name,
+						"Generated values: " + r.nextLong() + " :: " + r.nextLong() + " :: " + r.nextLong());
+				currentRequest = ((AppendToLog) request).getRequestID();
 			}
-			
+
 			try {
 				request.signMessage(key);
 			} catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
@@ -311,74 +314,78 @@ public class LogManagerClient {
 				e.printStackTrace();
 				return;
 			}
-			
-			//System.err.println("Sending request of type " + request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " + myPrimaryChannel);
+
+			// System.err.println("Sending request of type " +
+			// request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " +
+			// myPrimaryChannel);
 			sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
 			this.startExecution = System.currentTimeMillis();
-			
+
 			this.timeoutTimerID = setupTimer(new ExpiredOperation(currentRequest, request), operation_timeout);
 		}
-		
+
 		private void clearTimeout() {
-			if(timeoutTimerID != -1) {
+			if (timeoutTimerID != -1) {
 				cancelTimer(timeoutTimerID);
 				this.timeoutTimerID = -1;
 			}
 		}
-		
+
 		public void handleAppentToLogReply(AppendToLogReply msg, Host h, short protoId, int channel) {
 			clearTimeout();
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
-			
+
 			System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
-		
+
 		public void handleReadLogEntryReply(ReadLogEntryReply msg, Host h, short protoId, int channel) {
 			clearTimeout();
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
-			
-			System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+
+			System.err
+					.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
-		
+
 		public void handleLogEntry(LogEntry msg, Host h, short protoId, int channel) {
 			clearTimeout();
-			
-			System.err.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
-			
+
+			System.err
+					.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
+
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getIndex());
 		}
-		
+
 		public void handleExpiredOperationTimer(ExpiredOperation eo, long delay) {
-			if(!eo.req.equals(currentRequest))
+			if (!eo.req.equals(currentRequest))
 				return;
 
-			if(eo.message instanceof AppendToLog) 
+			if (eo.message instanceof AppendToLog)
 				m.reportStatus(APPEND_OP_ID, Status.FAILURE);
-			else if(eo.message instanceof ReadLogEntryRequest)
+			else if (eo.message instanceof ReadLogEntryRequest)
 				m.reportStatus(READ_OP_ID, Status.FAILURE);
-			
+
 			this.timeoutTimerID = -1;
 			executeOperation();
 		}
-		
+
 		private void uponServerDown(ServerDownEvent event, int channel) {
 			logger.warn(client_name + " " + event);
-			for(int i = 0; i < servers.length; i++) {
-				if(servers[i].equals(event.getServer())) {
+			for (int i = 0; i < servers.length; i++) {
+				if (servers[i].equals(event.getServer())) {
 					servers[i] = null;
 					break;
 				}
 			}
-			
-			if(this.myPrimaryServer.equals(event.getServer())) {
-				while(true) {
+
+			if (this.myPrimaryServer.equals(event.getServer())) {
+				while (true) {
 					int pick = r.nextInt(servers.length);
-					if(servers[pick] != null) {
+					if (servers[pick] != null) {
 						myPrimaryServer = servers[pick];
 						myPrimaryChannel = clientChannel[pick];
 						break;
@@ -393,17 +400,17 @@ public class LogManagerClient {
 
 		private void uponServerFailed(ServerFailedEvent event, int channel) {
 			logger.warn(client_name + " " + event);
-			for(int i = 0; i < servers.length; i++) {
-				if(servers[i].equals(event.getServer())) {
+			for (int i = 0; i < servers.length; i++) {
+				if (servers[i].equals(event.getServer())) {
 					servers[i] = null;
 					break;
 				}
 			}
-			
-			if(this.myPrimaryServer.equals(event.getServer())) {
-				while(true) {
+
+			if (this.myPrimaryServer.equals(event.getServer())) {
+				while (true) {
 					int pick = r.nextInt(servers.length);
-					if(servers[pick] != null) {
+					if (servers[pick] != null) {
 						myPrimaryServer = servers[pick];
 						myPrimaryChannel = clientChannel[pick];
 						break;

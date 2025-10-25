@@ -16,6 +16,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import common.events.ChannelAvailable;
+import common.events.NeighborDown;
 import common.events.NeighborUp;
 import membership.staticmembership.message.HelloMessage;
 import membership.staticmembership.message.HelloReplyMessage;
@@ -78,19 +79,20 @@ public class StaticMembershipProtocol extends GenericProtocol {
 	@Override
 	public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-		if (!props.containsKey(PAR_MYHOST) || !props.containsKey(PAR_NEIGHBORS) || ! props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
+		if (!props.containsKey(PAR_MYHOST) || !props.containsKey(PAR_NEIGHBORS)
+				|| !props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
 			if (!props.contains(PAR_MYHOST))
 				System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter: " + PAR_MYHOST
 						+ " (format: IP:PORT)");
 			if (!props.containsKey(PAR_NEIGHBORS))
 				System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter: " + PAR_NEIGHBORS
-						+ " (format: IP:PORT,IP:PORT,...,IP:PORT");	
-			if(!props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
+						+ " (format: IP:PORT,IP:PORT,...,IP:PORT");
+			if (!props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
 				System.err.println("Protocol " + PROTO_NAME + " requires mandatory paramter " + Crypto.CRYPTO_NAME_KEY);
 			}
 			System.exit(1);
 		}
-		
+
 		myIdentifier = props.getProperty(Crypto.CRYPTO_NAME_KEY);
 
 		String[] hostElements = props.getProperty(PAR_MYHOST).split(":");
@@ -102,7 +104,7 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		channelProps.put(TCPChannel.PORT_KEY, this.myself.getPort() + "");
 
 		channelID = createChannel(TCPChannel.NAME, channelProps);
-		
+
 		/*-------------------- Register Channel Event ------------------------------- */
 		registerChannelEventHandler(channelID, OutConnectionDown.EVENT_ID, this::uponOutConnectionDown);
 		registerChannelEventHandler(channelID, OutConnectionFailed.EVENT_ID, this::uponOutConnectionFailed);
@@ -114,12 +116,12 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		registerMessageSerializer(channelID, HelloMessage.MESSAGE_ID, HelloMessage.serializer);
 		registerMessageSerializer(channelID, HelloReplyMessage.MESSAGE_ID, HelloReplyMessage.serializer);
 		registerMessageSerializer(channelID, ReplyMessage.MESSAGE_ID, ReplyMessage.serializer);
-		
+
 		/*-------------------- Register Message Handlers ------------------------------- */
 		registerMessageHandler(channelID, HelloMessage.MESSAGE_ID, this::uponReceiveHelloMessage);
 		registerMessageHandler(channelID, HelloReplyMessage.MESSAGE_ID, this::uponReceiveHelloReplyMessage);
 		registerMessageHandler(channelID, ReplyMessage.MESSAGE_ID, this::uponReceiveReplyMessage);
-		
+
 		// Process neighbors and open connection to them
 
 		String[] neighborsCandidates = props.getProperty(PAR_NEIGHBORS).split(",");
@@ -132,8 +134,9 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		}
 
 		for (Host h : this.candidates) {
-			//This is a simple hack to ensure that only the node with highest port starts establishing the protocol
-			if(h.getPort() < myself.getPort()) {
+			// This is a simple hack to ensure that only the node with highest port starts
+			// establishing the protocol
+			if (h.getPort() < myself.getPort()) {
 				openConnection(h);
 			}
 		}
@@ -147,12 +150,13 @@ public class StaticMembershipProtocol extends GenericProtocol {
 			e.printStackTrace();
 			System.exit(1);
 		}
-		
+
 		triggerNotification(new ChannelAvailable(TCPChannel.NAME, channelID, myself, privateKey, publicKey));
 	}
 
 	/*
-	 * --------------------------------- Message Handlers ----------------------------
+	 * --------------------------------- Message Handlers
+	 * ----------------------------
 	 */
 
 	private void uponReceiveHelloMessage(HelloMessage msg, Host sender, short protoID, int channel) {
@@ -168,7 +172,8 @@ public class StaticMembershipProtocol extends GenericProtocol {
 
 		byte[] challengeAnswer = null;
 		try {
-			logger.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
+			logger
+					.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
 			Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
 			sig.initSign(privateKey);
 			sig.update(ByteBuffer.allocate(Long.BYTES).putLong(hisChallenge).array());
@@ -180,14 +185,14 @@ public class StaticMembershipProtocol extends GenericProtocol {
 
 		logger.info("Answering challenge put fowards by " + msg.getSender() + " sending my Challenge: " + myChallenge);
 		HelloReplyMessage hrm = new HelloReplyMessage(myself, publicKey, challengeAnswer, myChallenge);
-		
+
 		try {
 			hrm.signMessage(privateKey);
-			sendMessage(hrm , msg.getSender());
+			sendMessage(hrm, msg.getSender());
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
+
 	}
 
 	private void uponReceiveHelloReplyMessage(HelloReplyMessage msg, Host sender, short protoID, int channel) {
@@ -198,7 +203,8 @@ public class StaticMembershipProtocol extends GenericProtocol {
 
 		// Validate his answer to my challenge
 		try {
-			logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: " + issuedChallenges.get(msg.getSender()));
+			logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: "
+					+ issuedChallenges.get(msg.getSender()));
 			Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
 			sig.initVerify(msg.getPubKey());
 			sig.update(ByteBuffer.allocate(Long.BYTES).putLong(issuedChallenges.get(msg.getSender())).array());
@@ -224,7 +230,8 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		// Generate an answer to his challenge
 		byte[] challengeAnswer = null;
 		try {
-			logger.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
+			logger
+					.info("Computing answer for challenge put foward by " + msg.getSender() + " which is: " + msg.getChallenge());
 			Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
 			sig.initSign(privateKey);
 			sig.update(ByteBuffer.allocate(Long.BYTES).putLong(msg.getChallenge()).array());
@@ -236,13 +243,13 @@ public class StaticMembershipProtocol extends GenericProtocol {
 
 		// send the reply
 		ReplyMessage rm = new ReplyMessage(myself, challengeAnswer);
-		try { 
+		try {
 			rm.signMessage(privateKey);
 			sendMessage(rm, msg.getSender());
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
-		
+
 	}
 
 	private void uponReceiveReplyMessage(ReplyMessage msg, Host sender, short protoID, int channel) {
@@ -253,7 +260,8 @@ public class StaticMembershipProtocol extends GenericProtocol {
 
 		// Validate his answer to my challenge
 		try {
-			logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: " + issuedChallenges.get(msg.getSender()));
+			logger.info("Verifying answer for my challenge to " + msg.getSender() + " which is: "
+					+ issuedChallenges.get(msg.getSender()));
 			Signature sig = Signature.getInstance(SignaturesHelper.SignatureAlgorithm);
 			sig.initVerify(publicKeys.get(msg.getSender()));
 			sig.update(ByteBuffer.allocate(Long.BYTES).putLong(issuedChallenges.get(msg.getSender())).array());
@@ -287,6 +295,7 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		else if (this.neighbors.containsKey(event.getNode())) {
 			this.neighbors.remove(event.getNode());
 		}
+		triggerNotification(new NeighborDown(event.getNode(), this.neighbors.get(event.getNode())));
 	}
 
 	private void uponOutConnectionFailed(OutConnectionFailed<?> event, int channelId) {
@@ -299,13 +308,13 @@ public class StaticMembershipProtocol extends GenericProtocol {
 		if (this.candidates.remove(event.getNode())) {
 			this.neighbors.put(event.getNode(), null);
 			this.issuedChallenges.put(event.getNode(), new Random(System.currentTimeMillis()).nextLong());
-			
+
 			logger.info("Sending a challenge to " + event.getNode() + ": " + this.issuedChallenges.get(event.getNode()));
-			
+
 			HelloMessage hm = new HelloMessage(myself, publicKey, this.issuedChallenges.get(event.getNode()));
 			try {
 				hm.signMessage(privateKey);
-				sendMessage(hm,event.getNode());
+				sendMessage(hm, event.getNode());
 				logger.info("Out connection is up for " + event.getNode() + " sent challenge...");
 			} catch (Exception e) {
 				e.printStackTrace();

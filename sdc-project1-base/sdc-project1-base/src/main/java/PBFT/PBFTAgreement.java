@@ -96,14 +96,14 @@ public class PBFTAgreement extends GenericProtocol {
         registerSharedChannel(channelID);
         setDefaultChannel(channelID);
 
-        //Register Message Serializers
+        // Register Message Serializers
         registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
         registerMessageSerializer(channelID, PrepareMessage.MESSAGE_ID, PrepareMessage.serializer);
         registerMessageSerializer(channelID, CommitMessage.MESSAGE_ID, CommitMessage.serializer);
         registerMessageSerializer(channelID, ViewChangeMessage.MESSAGE_ID, ViewChangeMessage.serializer);
         registerMessageSerializer(channelID, NewViewMessage.MESSAGE_ID, NewViewMessage.serializer);
 
-        //Setup Message Handlers
+        // Setup Message Handlers
         try {
             registerMessageHandler(channelID, PrePrepareMessage.MESSAGE_ID,
                     (msg, from, srcProto, channel) -> onPrePrepare((PrePrepareMessage) msg, from));
@@ -142,6 +142,7 @@ public class PBFTAgreement extends GenericProtocol {
         Host newPrimary = sortedNeighbors.get((int) (currentView % sortedNeighbors.size()));
         this.primary = newPrimary;
         System.out.println("Primary atualizado: " + primary);
+        onMessageFromPrimary();
     }
 
     private boolean amPrimary() {
@@ -270,7 +271,7 @@ public class PBFTAgreement extends GenericProtocol {
         }
 
         System.out.println("Req: " + entry.getRequest().getRequestID());
-        System.out.println("F: " + ((2 * f) + 1));
+        System.out.println("Commit minimos: " + ((2 * f) + 1));
         System.out.println("Commit Count: " + entry.getCommitsCount());
         System.out.println("IsDelivered: " + entry.isDelivered());
 
@@ -289,8 +290,7 @@ public class PBFTAgreement extends GenericProtocol {
                     msg.getView(),
                     msg.getSeq(),
                     msg.getDigest(),
-                    self
-            );
+                    self);
             broadcast(myCommit);
         }
     }
@@ -314,22 +314,26 @@ public class PBFTAgreement extends GenericProtocol {
 
         Set<Host> votes = viewChangeVotes.get(v);
 
-        if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
-            startViewChange(v);
-            sentViewChange.add(v);
-        }
+        System.err.println("View Change votes for view " + v + ": " + votes.size());
 
+        // devia ser 2f
         if (votes.size() >= (2 * f + 1)) {
 
             if (v > currentView) {
                 currentView = v;
             }
 
-            primary = neighbors.get((int) (currentView % neighbors.size()));
+            updatePrimary();
+            System.err.println("New primary after view change: " + primary);
             if (amPrimary() && !startedViews.contains(v)) {
                 startedViews.add(v);
                 startNewView(v);
             }
+        }
+
+        else if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
+            startViewChange(v);
+            sentViewChange.add(v);
         }
     }
 
@@ -351,17 +355,9 @@ public class PBFTAgreement extends GenericProtocol {
 
         vcm.setSign(sign);
 
-        broadcast(vcm);
+        System.out.println("A iniciar view change para a view: " + self);
 
-        if (amPrimary()) {
-            long maxSeq = log.keySet().stream().mapToLong(Long::longValue).max().orElse(seqNo);
-            seqNo = maxSeq;
-            for (PBFTLogEntry entry : log.values()) {
-                if (!entry.isDelivered()) {
-                    propose(entry.getRequest());
-                }
-            }
-        }
+        broadcast(vcm);
     }
 
     private void startNewView(long v) {
@@ -384,13 +380,13 @@ public class PBFTAgreement extends GenericProtocol {
 
         broadcast(nvm);
 
+        System.err.println("Primary mandou mensagem de nova view: " + v);
+
         triggerNotification(new NewViewNotification(v));
 
-        if (amPrimary()) {
-            for (PBFTLogEntry entry : log.values()) {
-                if (!entry.isDelivered()) {
-                    propose(entry.getRequest());
-                }
+        for (PBFTLogEntry entry : log.values()) {
+            if (!entry.isDelivered()) {
+                propose(entry.getRequest());
             }
         }
 
@@ -419,20 +415,21 @@ public class PBFTAgreement extends GenericProtocol {
             }
         }
 
-        if (msg.getNovaView() > currentView) {
-            currentView = msg.getNovaView();
-            primary = neighbors.get((int) (currentView % neighbors.size()));
-        }
+        currentView = msg.getNovaView();
+        updatePrimary();
+
     }
 
     public void onMessageFromPrimary() {
+        System.out.println("Primary respondeu: ");
         lastPrimaryResponseTime = System.currentTimeMillis();
     }
 
     public void checkPrimaryTimeout() {
         boolean noPrimaryResponse = (System.currentTimeMillis() - lastPrimaryResponseTime > PRIMARY_TIMEOUT);
         boolean noProgress = (System.currentTimeMillis() - lastProgressTime > PROGRESS_TIMEOUT);
-        if (!amPrimary() && neighbors.isEmpty() && (noPrimaryResponse || noProgress)) {
+        System.out.println("No Primary Response: " + noPrimaryResponse);
+        if (!amPrimary() && !neighbors.isEmpty() && (noPrimaryResponse || noProgress)) {
             startViewChange(currentView + 1);
         }
     }
