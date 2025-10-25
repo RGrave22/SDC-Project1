@@ -405,13 +405,10 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         if(!echoes.contains(myself)) {
             echoes.add(myself);
 
-
             BRBEchoMessage echoMsg = new BRBEchoMessage(myself, mid, payload);
 
             try {
                 echoMsg.signMessage(privateKey);
-
-
 
                 for (Host h : neighbors.keySet()) {
                     if (!h.equals(myself)) {

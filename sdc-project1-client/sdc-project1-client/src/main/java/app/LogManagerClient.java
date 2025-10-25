@@ -333,7 +333,7 @@ public class LogManagerClient {
 //            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
 //                     | InvalidSerializerException e) {
 //                System.err.println(client_name + " (" + client_id + "): Unable to sign client request.");
-//                e.printStackTrace();
+//                e.printStackTrace();  
 //                return;
 //            }
 //
