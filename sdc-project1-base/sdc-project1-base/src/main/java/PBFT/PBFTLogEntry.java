@@ -13,18 +13,20 @@ public class PBFTLogEntry {
     private final long view;
     private final AppendRequest request;
     private final byte[] digest;
+    private final Host creator;
 
     private final Set<Host> prepares;
     private final Set<Host> commits;
     private boolean delivered = false;
 
-    public PBFTLogEntry(long seq, long view, AppendRequest request, byte[] digest) {
+    public PBFTLogEntry(long seq, long view, AppendRequest request, byte[] digest, Host creator) {
         this.seq = seq;
         this.view = view;
         this.request = request;
         this.prepares = new HashSet<>();
         this.commits = new HashSet<>();
         this.digest = digest;
+        this.creator = creator;
     }
 
     public long getSeq() {
@@ -78,6 +80,10 @@ public class PBFTLogEntry {
 
     public boolean hasCommitFrom(Host h) {
         return commits.contains(h);
+    }
+
+    public Host getCreator() {
+        return creator;
     }
 
 }

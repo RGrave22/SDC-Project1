@@ -17,6 +17,7 @@ import PBFT.notifications.CommitNotification;
 import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
 import SMR.notifications.DeliverEntryNotification;
+import SMR.requests.CheckPointRequest;
 import SMR.timers.ViewChangeTimer;
 import common.events.NeighborDown;
 import common.events.NeighborUp;
@@ -144,6 +145,7 @@ public class SMReplicationProtocol extends GenericProtocol {
     private void tryApplyPending() {
 
         long next = lastApplied + 1;
+        boolean appliedSomething = false;
 
         while (true) {
 
@@ -153,11 +155,16 @@ public class SMReplicationProtocol extends GenericProtocol {
             }
 
             lastApplied = next;
+            appliedSomething = true;
 
             triggerNotification(new DeliverEntryNotification(req.getRequestID(), req.getClientID(),
                     req.getClientRequest(), req.getServerSignature(), next));
 
             next++;
+        }
+
+        if (appliedSomething) {
+            sendRequest(new CheckPointRequest(lastApplied), underlyingProtocolID);
         }
     }
 

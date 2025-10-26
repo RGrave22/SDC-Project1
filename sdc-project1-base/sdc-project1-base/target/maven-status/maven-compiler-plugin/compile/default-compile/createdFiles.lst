@@ -11,6 +11,7 @@ common\events\NeighborDown.class
 PBFT\messages\CommitMessage$1.class
 app\messages\client\AppendToLogReply.class
 Main.class
+PBFT\messages\FowardAppendMessage$1.class
 app\messages\client\LogEntry.class
 PBFT\messages\ViewChangeMessage.class
 PBFT\messages\CommitMessage.class
@@ -22,6 +23,7 @@ PBFT\messages\NewViewMessage.class
 PBFT\requests\AppendRequest.class
 SMR\SMReplicationProtocol.class
 app\messages\client\ReadLogEntryRequest.class
+PBFT\messages\FowardAppendMessage.class
 membership\staticmembership\StaticMembershipProtocol.class
 PBFT\messages\NewViewMessage$1.class
 membership\staticmembership\message\HelloMessage$1.class
@@ -37,6 +39,7 @@ utils\SignaturesHelper.class
 SMR\notifications\DeliverEntryNotification.class
 common\events\NeighborUp.class
 PBFT\notifications\CommitNotification.class
+SMR\requests\CheckPointRequest.class
 PBFT\messages\PrePrepareMessage.class
 membership\staticmembership\message\HelloReplyMessage$1.class
 membership\staticmembership\message\ReplyMessage$1.class

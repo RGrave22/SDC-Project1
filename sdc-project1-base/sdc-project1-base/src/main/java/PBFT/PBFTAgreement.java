@@ -26,6 +26,7 @@ import PBFT.messages.ViewChangeMessage;
 import PBFT.notifications.CommitNotification;
 import PBFT.notifications.NewViewNotification;
 import PBFT.requests.AppendRequest;
+import SMR.requests.CheckPointRequest;
 import common.events.ChannelAvailable;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
 import pt.unl.fct.di.novasys.babel.exceptions.HandlerRegistrationException;
@@ -62,12 +63,14 @@ public class PBFTAgreement extends GenericProtocol {
     private Host self;
     private Host primary;
 
+    private long lastStableCheckpointSeqNo;
     private long seqNo;
     private int f;
     private long currentView;
 
     public PBFTAgreement() {
         super(PROTO_NAME, PROTO_ID);
+        this.lastStableCheckpointSeqNo = 0;
         this.seqNo = 0;
         this.f = 1;
         this.currentView = 0;
@@ -82,10 +85,24 @@ public class PBFTAgreement extends GenericProtocol {
         this.neighbors = new ArrayList<>();
     }
 
+    public void setF(int newF) {
+        this.f = newF;
+    }
+
+    public void setNeighbor(List<Host> newNeighbors) {
+        this.neighbors = newNeighbors;
+    }
+
+    public void setPublicKeys(Map<Host, PublicKey> newPublickeys) {
+        this.publicKeys = newPublickeys;
+    }
+
     @Override
     public void init(Properties props) throws HandlerRegistrationException, IOException {
 
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleRequest);
+
+        registerRequestHandler(CheckPointRequest.REQUEST_ID, this::handleCheckPointRequest);
 
         subscribeNotification(ChannelAvailable.NOTIFICATION_ID, this::handleChannelAvailableNotification);
 
@@ -126,15 +143,17 @@ public class PBFTAgreement extends GenericProtocol {
 
     }
 
-    public void handleRequest(AppendRequest req, short sourceProto) {
-        if (amPrimary()) {
-            propose(req);
-        } else {
-            System.out.println("Não sou o líder, a encaminhar para " + primary);
-            byte[] digest = SignaturesHelper.digest(req.getClientRequest());
-            FowardAppendMessage fwdMsg = new FowardAppendMessage(req, digest, self);
-            this.sign(fwdMsg);
-            sendMessage(fwdMsg, primary);
+    public void onMessageFromPrimary() {
+        System.out.println("Primary respondeu: ");
+        lastPrimaryResponseTime = System.currentTimeMillis();
+    }
+
+    public void checkPrimaryTimeout() {
+        boolean noPrimaryResponse = (System.currentTimeMillis() - lastPrimaryResponseTime > PRIMARY_TIMEOUT);
+        boolean noProgress = (System.currentTimeMillis() - lastProgressTime > PROGRESS_TIMEOUT);
+        System.out.println("No Primary Response: " + noPrimaryResponse);
+        if (!amPrimary() && !neighbors.isEmpty() && (noPrimaryResponse || noProgress)) {
+            startViewChange(currentView + 1);
         }
     }
 
@@ -160,11 +179,26 @@ public class PBFTAgreement extends GenericProtocol {
         return self != null && primary != null && primary.equals(self);
     }
 
-    private void sign(SignedProtoMessage msg) {
-        try {
-            msg.signMessage(privateKey);
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidSerializerException e) {
-            throw new RuntimeException("Erro ao assinar FowardAppendMessage", e);
+    public void handleRequest(AppendRequest req, short sourceProto) {
+        if (amPrimary()) {
+            propose(req);
+        } else {
+            System.out.println("Não sou o líder, a encaminhar para " + primary);
+            byte[] digest = SignaturesHelper.digest(req.getClientRequest());
+            FowardAppendMessage fwdMsg = new FowardAppendMessage(req, digest, self);
+            this.sign(fwdMsg);
+            sendMessage(fwdMsg, primary);
+        }
+    }
+
+    public void handleCheckPointRequest(CheckPointRequest req, short sourceProto) {
+
+        if (req.getLastAppliedSeqNo() > this.lastStableCheckpointSeqNo) {
+            this.lastStableCheckpointSeqNo = req.getLastAppliedSeqNo();
+
+            log.keySet().removeIf(seq -> seq <= this.lastStableCheckpointSeqNo);
+            pendingPrepares.keySet().removeIf(seq -> seq <= this.lastStableCheckpointSeqNo);
+            pendingCommits.keySet().removeIf(seq -> seq <= this.lastStableCheckpointSeqNo);
         }
     }
 
@@ -186,24 +220,12 @@ public class PBFTAgreement extends GenericProtocol {
 
         long seq = ++seqNo;
         byte[] digest = SignaturesHelper.digest(req.getClientRequest());
-        PBFTLogEntry entry = new PBFTLogEntry(seq, currentView, req, digest);
+        PBFTLogEntry entry = new PBFTLogEntry(seq, currentView, req, digest, self);
         log.put(seq, entry);
 
         PrePrepareMessage ppm = new PrePrepareMessage(self, currentView, seq, digest, req);
 
         broadcast(ppm);
-    }
-
-    public void setF(int newF) {
-        this.f = newF;
-    }
-
-    public void setNeighbor(List<Host> newNeighbors) {
-        this.neighbors = newNeighbors;
-    }
-
-    public void setPublicKeys(Map<Host, PublicKey> newPublickeys) {
-        this.publicKeys = newPublickeys;
     }
 
     private void broadcast(SignedProtoMessage msg) {
@@ -214,6 +236,14 @@ public class PBFTAgreement extends GenericProtocol {
             sendMessage(msg, h);
         }
         sendLocalMessage(msg);
+    }
+
+    private void sign(SignedProtoMessage msg) {
+        try {
+            msg.signMessage(privateKey);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidSerializerException e) {
+            throw new RuntimeException("Erro ao assinar FowardAppendMessage", e);
+        }
     }
 
     private void sendLocalMessage(SignedProtoMessage msg) {
@@ -266,7 +296,7 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura PrePrepare: " + e.getMessage());
             return;
         }
 
@@ -287,7 +317,7 @@ public class PBFTAgreement extends GenericProtocol {
             return;
         }
 
-        PBFTLogEntry entry = new PBFTLogEntry(msg.getSeq(), msg.getView(), msg.getRequest(), digest);
+        PBFTLogEntry entry = new PBFTLogEntry(msg.getSeq(), msg.getView(), msg.getRequest(), digest, primary);
         log.put(msg.getSeq(), entry);
 
         List<PrepareMessage> pendPrepares = pendingPrepares.remove(msg.getSeq());
@@ -322,7 +352,7 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura Prepare: " + e.getMessage());
             return;
         }
 
@@ -353,7 +383,7 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura Commit: " + e.getMessage());
             return;
         }
 
@@ -402,7 +432,7 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura ViewChange: " + e.getMessage());
             return;
         }
 
@@ -427,6 +457,12 @@ public class PBFTAgreement extends GenericProtocol {
                 startedViews.add(v);
                 startNewView(v);
             }
+
+            sentViewChange.removeIf(oldV -> oldV < v);
+            startedViews.removeIf(oldV -> oldV < v);
+            receivedViewChanges.keySet().removeIf(oldV -> oldV < v);
+            viewChangeVotes.keySet().removeIf(oldV -> oldV < v);
+
         } else if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
             startViewChange(v);
             sentViewChange.add(v);
@@ -460,7 +496,9 @@ public class PBFTAgreement extends GenericProtocol {
 
         if (prePrepares != null) {
             for (PrePrepareMessage ppm : prePrepares) {
-                PrePrepareMessage myPpm = new PrePrepareMessage(self, currentView, ppm.getSeq(), ppm.getDigest(), ppm.getRequest());
+                PBFTLogEntry entry = log.get(ppm.getSeq());
+                Host originalPrimary = entry.getCreator();
+                PrePrepareMessage myPpm = new PrePrepareMessage(originalPrimary, currentView, ppm.getSeq(), ppm.getDigest(), ppm.getRequest());
                 broadcast(myPpm);
             }
         }
@@ -476,44 +514,38 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura NewView: " + e.getMessage());
             return;
         }
 
         onMessageFromPrimary();
 
-        for (PrePrepareMessage ppm : msg.getPrePreparedChanges()) {
-            if (!log.containsKey(ppm.getSeq())) {
-                PBFTLogEntry entry = new PBFTLogEntry(ppm.getSeq(), ppm.getView(), ppm.getRequest(), ppm.getDigest());
-                log.put(ppm.getSeq(), entry);
-                PrepareMessage prepare = new PrepareMessage(ppm.getView(), ppm.getSeq(), ppm.getDigest(), self);
-                broadcast(prepare);
-            }
-        }
-
         currentView = msg.getNovaView();
         updatePrimary();
 
-    }
+        for (PrePrepareMessage ppm : msg.getPrePreparedChanges()) {
 
-    public void onMessageFromPrimary() {
-        System.out.println("Primary respondeu: ");
-        lastPrimaryResponseTime = System.currentTimeMillis();
-    }
+            PBFTLogEntry entry = log.get(ppm.getSeq());
+            if (entry == null) {
+                entry = new PBFTLogEntry(ppm.getSeq(), ppm.getView(), ppm.getRequest(), ppm.getDigest(), ppm.getSender());
+                log.put(ppm.getSeq(), entry);
+            }
 
-    public void checkPrimaryTimeout() {
-        boolean noPrimaryResponse = (System.currentTimeMillis() - lastPrimaryResponseTime > PRIMARY_TIMEOUT);
-        boolean noProgress = (System.currentTimeMillis() - lastProgressTime > PROGRESS_TIMEOUT);
-        System.out.println("No Primary Response: " + noPrimaryResponse);
-        if (!amPrimary() && !neighbors.isEmpty() && (noPrimaryResponse || noProgress)) {
-            startViewChange(currentView + 1);
+            PrepareMessage prepare = new PrepareMessage(ppm.getView(), ppm.getSeq(), ppm.getDigest(), self);
+            broadcast(prepare);
         }
+
+        sentViewChange.removeIf(oldV -> oldV < currentView);
+        startedViews.removeIf(oldV -> oldV < currentView);
+        receivedViewChanges.keySet().removeIf(oldV -> oldV < currentView);
+        viewChangeVotes.keySet().removeIf(oldV -> oldV < currentView);
+
     }
 
     private List<PrePrepareMessage> collectPendingPrePrepares(long newView) {
         List<PrePrepareMessage> pending = new ArrayList<>();
         for (PBFTLogEntry e : log.values()) {
-            if (!e.isDelivered() && e.getView() <= newView) {
+            if (e.getSeq() > lastStableCheckpointSeqNo && !e.isDelivered() && e.getView() <= newView) {
                 PrePrepareMessage ppm = new PrePrepareMessage(self, e.getView(), e.getSeq(), e.getDigest(),
                         e.getRequest());
                 pending.add(ppm);
@@ -525,7 +557,7 @@ public class PBFTAgreement extends GenericProtocol {
     private List<CommitMessage> collectCommits(long newView) {
         List<CommitMessage> done = new ArrayList<>();
         for (PBFTLogEntry e : log.values()) {
-            if (e.isDelivered() && e.getView() <= newView) {
+            if (e.getSeq() > lastStableCheckpointSeqNo && e.isDelivered() && e.getView() <= newView) {
                 CommitMessage cm = new CommitMessage(e.getView(), e.getSeq(), e.getDigest(),
                         self);
                 done.add(cm);

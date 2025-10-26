@@ -20,7 +20,7 @@ public class AppendRequest extends ProtoRequest {
 
     private final UUID requestID;
     private final String clientID;
-    private Host source;
+    private final Host source;
     private final byte[] clientRequest;
     private byte[] serverSignature;
     private final long seqNo;
