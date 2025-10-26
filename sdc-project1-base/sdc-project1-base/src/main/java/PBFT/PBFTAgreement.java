@@ -55,6 +55,7 @@ public class PBFTAgreement extends GenericProtocol {
     private final Map<Long, List<CommitMessage>> pendingCommits = new ConcurrentHashMap<>();
     private final Set<Long> startedViews;
     private final Set<Long> sentViewChange;
+    private PublicKey selfPublicKey;
     private PrivateKey privateKey;
     private Map<Host, PublicKey> publicKeys;
 
@@ -117,7 +118,7 @@ public class PBFTAgreement extends GenericProtocol {
         registerSharedChannel(channelID);
         setDefaultChannel(channelID);
 
-        this.publicKeys.put(self, notification.getMyPublicKey());
+        this.selfPublicKey = notification.getMyPublicKey();
 
         registerMessageSerializer(channelID, FowardAppendMessage.MESSAGE_ID, FowardAppendMessage.serializer);
         registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
@@ -268,14 +269,8 @@ public class PBFTAgreement extends GenericProtocol {
 
     private void onFowardReq(FowardAppendMessage msg, Host from) {
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura de FowardAppendMessage: " + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
 
@@ -291,14 +286,8 @@ public class PBFTAgreement extends GenericProtocol {
             return;
         }
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura PrePrepare: " + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
 
@@ -347,14 +336,8 @@ public class PBFTAgreement extends GenericProtocol {
         System.out.println("KeySet: " + log.keySet());
         System.out.println("Seq: " + msg.getSeq());
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura Prepare: " + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
 
@@ -378,14 +361,8 @@ public class PBFTAgreement extends GenericProtocol {
 
         System.out.println("Começa commit: " + msg.getSeq());
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura Commit: " + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
 
@@ -418,7 +395,8 @@ public class PBFTAgreement extends GenericProtocol {
                     self);
             try {
                 myCommit.signMessage(privateKey);
-            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidSerializerException e) {
+            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
+                    | InvalidSerializerException e) {
                 throw new RuntimeException("Erro ao assinar PrePrepareMessage", e);
             }
             broadcast(myCommit);
@@ -427,14 +405,8 @@ public class PBFTAgreement extends GenericProtocol {
 
     public void onViewChange(ViewChangeMessage msg, Host from) {
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura ViewChange de : " + from + ". Resultado:" + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
 
@@ -466,8 +438,8 @@ public class PBFTAgreement extends GenericProtocol {
             viewChangeVotes.keySet().removeIf(oldV -> oldV < v);
 
         } else if (!amPrimary() && votes.size() >= f + 1 && !sentViewChange.contains(v)) {
-            startViewChange(v);
             sentViewChange.add(v);
+            startViewChange(v);
         }
     }
 
@@ -500,16 +472,12 @@ public class PBFTAgreement extends GenericProtocol {
 
     public void onNewView(NewViewMessage msg, Host from) {
 
-        try {
-            PublicKey senderKey = publicKeys.get(from);
-            if (!msg.checkSignature(senderKey)) {
-                System.out.println("Assinatura inválida de " + from);
-                return;
-            }
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura NewView: " + e.getMessage());
+        if (!this.verifySignature(msg, from)) {
+            System.out.println("Assinatura inválida de " + from);
             return;
         }
+
+        System.out.println("Starting on new view");
 
         onMessageFromPrimary();
 
@@ -520,7 +488,8 @@ public class PBFTAgreement extends GenericProtocol {
 
             PBFTLogEntry entry = log.get(ppm.getSeq());
             if (entry == null) {
-                entry = new PBFTLogEntry(ppm.getSeq(), ppm.getView(), ppm.getRequest(), ppm.getDigest(), ppm.getSender());
+                entry = new PBFTLogEntry(ppm.getSeq(), ppm.getView(), ppm.getRequest(), ppm.getDigest(),
+                        ppm.getSender());
                 log.put(ppm.getSeq(), entry);
             }
 
@@ -559,7 +528,7 @@ public class PBFTAgreement extends GenericProtocol {
         return done;
     }
 
-    /*private boolean verifySignature(SignedProtoMessage msg, Host from) {
+    private boolean verifySignature(SignedProtoMessage msg, Host from) {
         try {
             PublicKey key;
             if (from.equals(self)) {
@@ -568,10 +537,11 @@ public class PBFTAgreement extends GenericProtocol {
                 key = publicKeys.get(from);
             }
             return msg.checkSignature(key);
-        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException
+                | NoSignaturePresentException e) {
             System.out.println("Erro ao verificar assinatura de " + from + ": " + e.getMessage());
             return false;
         }
-    }*/
+    }
 
 }
