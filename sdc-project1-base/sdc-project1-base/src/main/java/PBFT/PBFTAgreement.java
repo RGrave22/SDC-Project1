@@ -117,6 +117,8 @@ public class PBFTAgreement extends GenericProtocol {
         registerSharedChannel(channelID);
         setDefaultChannel(channelID);
 
+        this.publicKeys.put(self, notification.getMyPublicKey());
+
         registerMessageSerializer(channelID, FowardAppendMessage.MESSAGE_ID, FowardAppendMessage.serializer);
         registerMessageSerializer(channelID, PrePrepareMessage.MESSAGE_ID, PrePrepareMessage.serializer);
         registerMessageSerializer(channelID, PrepareMessage.MESSAGE_ID, PrepareMessage.serializer);
@@ -432,7 +434,7 @@ public class PBFTAgreement extends GenericProtocol {
                 return;
             }
         } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
-            System.out.println("Erro ao verificar assinatura ViewChange: " + e.getMessage());
+            System.out.println("Erro ao verificar assinatura ViewChange de : " + from + ". Resultado:" + e.getMessage());
             return;
         }
 
@@ -494,15 +496,6 @@ public class PBFTAgreement extends GenericProtocol {
 
         triggerNotification(new NewViewNotification(v));
 
-        if (prePrepares != null) {
-            for (PrePrepareMessage ppm : prePrepares) {
-                PBFTLogEntry entry = log.get(ppm.getSeq());
-                Host originalPrimary = entry.getCreator();
-                PrePrepareMessage myPpm = new PrePrepareMessage(originalPrimary, currentView, ppm.getSeq(), ppm.getDigest(), ppm.getRequest());
-                broadcast(myPpm);
-            }
-        }
-
     }
 
     public void onNewView(NewViewMessage msg, Host from) {
@@ -546,7 +539,7 @@ public class PBFTAgreement extends GenericProtocol {
         List<PrePrepareMessage> pending = new ArrayList<>();
         for (PBFTLogEntry e : log.values()) {
             if (e.getSeq() > lastStableCheckpointSeqNo && !e.isDelivered() && e.getView() <= newView) {
-                PrePrepareMessage ppm = new PrePrepareMessage(self, e.getView(), e.getSeq(), e.getDigest(),
+                PrePrepareMessage ppm = new PrePrepareMessage(e.getCreator(), e.getView(), e.getSeq(), e.getDigest(),
                         e.getRequest());
                 pending.add(ppm);
             }
@@ -565,5 +558,20 @@ public class PBFTAgreement extends GenericProtocol {
         }
         return done;
     }
+
+    /*private boolean verifySignature(SignedProtoMessage msg, Host from) {
+        try {
+            PublicKey key;
+            if (from.equals(self)) {
+                key = selfPublicKey;
+            } else {
+                key = publicKeys.get(from);
+            }
+            return msg.checkSignature(key);
+        } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException | InvalidFormatException | NoSignaturePresentException e) {
+            System.out.println("Erro ao verificar assinatura de " + from + ": " + e.getMessage());
+            return false;
+        }
+    }*/
 
 }
