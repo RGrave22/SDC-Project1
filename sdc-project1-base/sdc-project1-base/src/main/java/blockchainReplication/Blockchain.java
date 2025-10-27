@@ -44,6 +44,7 @@ public class Blockchain {
     public synchronized boolean addBlock(Block newBlock) {
         Block lastBlock = getLastBlock();
 
+        //É suposto validar o bloco aqui?
         if (!validateBlock(newBlock)) {
             System.out.println("Block invalid");
             return false;
@@ -95,7 +96,7 @@ public class Blockchain {
         }
     }
 
-    private boolean validateBlock(Block block) {
+    public boolean validateBlock(Block block) {
         return block.getHash().equals(block.calculateHash());
     }
 

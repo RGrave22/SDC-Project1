@@ -76,17 +76,6 @@ public class Block {
                 return false;
             }
 
-            synchronized (pauseLock) {
-                while (paused) {
-                    try {
-                        pauseLock.wait();
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        return false;
-                    }
-                }
-            }
-
             this.nonce++;
             this.hash = calculateHash();
         }
@@ -95,20 +84,9 @@ public class Block {
     }
 
 
-    public void pauseMining() {
-        paused = true;
-    }
-
-    public void resumeMining() {
-        synchronized (pauseLock) {
-            paused = false;
-            pauseLock.notifyAll();
-        }
-    }
-
     public void stopMining() {
         stopMining.set(true);
-        resumeMining(); // se estiver pausado, libera para sair da espera e terminar
+        
     }
 
     public byte[] serialize() throws IOException {

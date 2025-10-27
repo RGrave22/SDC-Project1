@@ -112,9 +112,8 @@ public class BlockchainReplication extends GenericProtocol {
 
             Block block = Block.deserialize(notification.getClientRequest());
 
-            if(isMining){
-                currentMining.pauseMining();
-                //Validar o bloco novo e ver se faz sentido adicionar, se sim, parar a mineração, se não, continuar
+            if(blockchain.validateBlock(block)){
+
             }
 
 //            boolean validate = blockchain.addBlock(block);
