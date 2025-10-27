@@ -33,13 +33,16 @@ public class BlockchainReplication extends GenericProtocol {
     int numberOfRequestsPerBlock = 5;
     int difficulty = 4; //Podemos mudar a dificuldade
     private Blockchain blockchain = new Blockchain(difficulty);
+    private boolean isMining;
+    private Block currentMining;
+
 
 
     public BlockchainReplication() {
         super(PROTO_NAME, PROTO_ID);
         this.log = new TreeMap<>();
         this.pendingRequests = new HashMap<>();
-
+        isMining = false;
     }
 
     @Override
@@ -66,33 +69,42 @@ public class BlockchainReplication extends GenericProtocol {
     private void onAppend(AppendRequest req, short fromProto) {
         pendingRequests.put(req.getRequestID(), req);
         //agreement.propose(req);
-        if(pendingRequests.size() >= numberOfRequestsPerBlock) {
-            sendBlock();
+        if(pendingRequests.size() >= numberOfRequestsPerBlock && !isMining) {
+            createBlock();
+            isMining = true;
+        }else{
+            System.out.println("Node mining...");
+        }
+
+    }
+
+    private void createBlock() {
+        List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
+
+        Block lastBlock = blockchain.getLastBlock();
+        Block newBlock = new Block(lastBlock.getHash(), toInclude);
+
+        //Minerar o bloco
+        if(blockchain.addBlock(newBlock)){
+            currentMining =  newBlock;
+        }
+
+
+    }
+
+    protected void broadCastBlock(Block block) {
+        try{
+            isMining = false;
+            AppendRequest lastRequest = block.getEntries().getLast();
+            BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), block.serialize());
+
+        }catch(Exception e){
+            System.out.println(e.getMessage());
         }
     }
 
-    private void sendBlock() {
-        try {
-            List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
-            //pendingRequests.clear();
-
-            Block lastBlock = blockchain.getLastBlock();
-            Block newBlock = new Block(lastBlock.getHash(), toInclude);
 
 
-            // Simulamos consenso imediato:
-
-
-            //if (accepted) {
-                //Não sei bem como colocar o id, mas pronto (pus tudo do ultimo pedido da lista do bloco)
-            AppendRequest lastRequest = newBlock.getEntries().getLast();
-            BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), newBlock.serialize());
-            //}
-
-        }catch (IOException e){
-            System.out.println("Error: " + e.getMessage());
-        }
-    }
 
     private void onDeliverEntry(DeliverBroadcastedEntryNotification notification, short sourceProto) {
 
@@ -100,28 +112,31 @@ public class BlockchainReplication extends GenericProtocol {
 
             Block block = Block.deserialize(notification.getClientRequest());
 
-            boolean validate = blockchain.addBlock(block);
-
-            if(validate) {
-                List<AppendRequest> toRemove = block.getEntries();
-                for(AppendRequest appendRequest : toRemove) {
-                    pendingRequests.remove(appendRequest.getRequestID());
-
-                    wait(1000);
-                    //Acho que esta mal criada
-                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
-                    triggerNotification(deliverEntryNotification);
-                }
-
-
+            if(isMining){
+                currentMining.pauseMining();
+                //Validar o bloco novo e ver se faz sentido adicionar, se sim, parar a mineração, se não, continuar
             }
+
+//            boolean validate = blockchain.addBlock(block);
+//
+//            if(validate) {
+//                List<AppendRequest> toRemove = block.getEntries();
+//                for(AppendRequest appendRequest : toRemove) {
+//                    pendingRequests.remove(appendRequest.getRequestID());
+//
+//                    //wait(1000);
+//                    //Acho que esta mal criada
+//                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+//                    triggerNotification(deliverEntryNotification);
+//                }
+//
+//
+//            }
 
 
 
         }catch (IOException e){
             System.out.println("Error: " + e.getMessage());
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
 
     }
@@ -131,6 +146,7 @@ public class BlockchainReplication extends GenericProtocol {
     }
 
     private void onNewView(NewViewNotification notification, short sourceProto) {
+
     }
 
 }
