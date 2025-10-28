@@ -21,8 +21,18 @@ public class Blockchain {
         List<AppendRequest> logEntries = new ArrayList<>();
         String hash = "0";
         Block genesisBlock = new Block(hash, logEntries);
-        genesisBlock.mineBlock(difficulty);
-        blockchain.add(genesisBlock);
+        genesisBlock.mineBlock(
+                4,
+                () -> {
+                    blockchain.add(genesisBlock);
+                    System.out.println("Genesis block added: " + genesisBlock.getHash());
+                },
+                () -> {
+                    System.out.println("Mineration was canceled!");
+                    //logica para quando a mineração é cancelada (normalmente quando um bloco novo chega)
+                }
+        );
+
     }
 
 //    public void addBlock(Block newBlock) {
@@ -33,17 +43,25 @@ public class Blockchain {
 
     public synchronized boolean addBlock(Block newBlock) {
         Block lastBlock = getLastBlock();
-        if (!lastBlock.getHash().equals(newBlock.getPreviousHash())) {
-            System.out.println("Bloco rejeitado: hash anterior não confere");
-            return false;
-        }
+
+        //É suposto validar o bloco aqui?
         if (!validateBlock(newBlock)) {
-            System.out.println("Bloco rejeitado: validação falhou");
+            System.out.println("Block invalid");
             return false;
         }
-        newBlock.mineBlock(difficulty);
-        blockchain.add(newBlock);
-        System.out.println("Bloco adicionado: " + newBlock.getHash());
+
+        newBlock.mineBlock(
+                4,
+                () -> {
+                    blockchain.add(newBlock);
+                },
+                () -> {
+                    System.out.println("Mineration was canceled!");
+                    //logica para quando a mineração é cancelada (normalmente quando um bloco novo chega)
+                }
+        );
+
+        System.out.println("Block added to blockchain: " + newBlock.getHash());
         return true;
     }
 
@@ -78,7 +96,7 @@ public class Blockchain {
         }
     }
 
-    private boolean validateBlock(Block block) {
+    public boolean validateBlock(Block block) {
         return block.getHash().equals(block.calculateHash());
     }
 

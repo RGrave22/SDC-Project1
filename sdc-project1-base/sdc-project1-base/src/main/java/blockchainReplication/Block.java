@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class Block {
     private final String previousHash;
@@ -19,6 +20,12 @@ public class Block {
     private final long timestamp;
     private String hash;
     private int nonce;
+
+    //Objetos para a thread
+    private final Object pauseLock = new Object();
+    private volatile boolean paused = false;
+    private final AtomicBoolean stopMining = new AtomicBoolean(false);
+    private Thread miningThread;
 
     public Block(String previousHash, List<AppendRequest> entries) {
         this.previousHash = previousHash;
@@ -41,18 +48,45 @@ public class Block {
         String dataToHash = previousHash + Long.toString(timestamp) + Integer.toString(nonce) + entries.toString();
         return Crypto.applySha256(dataToHash);
     }
+    
+    
+    public void mineBlock(int difficulty, Runnable onFinish, Runnable onCancel){
+        stopMining.set(false);
+        paused = false;
+        miningThread = new Thread(() -> {
+            boolean completed = mineBlockThread(difficulty); // retorna true se terminou
+            if (completed && onFinish != null) {
+                onFinish.run(); // 👈 chamada quando termina com sucesso
+            } else if (!completed && onCancel != null) {
+                onCancel.run(); // 👈 chamada quando é cancelado
+            }
+        });
+        miningThread.start();
+    }
 
-    public void mineBlock(int difficulty) {
+    private boolean mineBlockThread(int difficulty) {
         if (difficulty < 0) throw new IllegalArgumentException("difficulty must be >= 0");
         final String targetPrefix = "0".repeat(difficulty);
         // Garante que o hash está alinhado com o nonce atual
         this.hash = calculateHash();
         while (!this.hash.startsWith(targetPrefix)) {
+
+            if (stopMining.get()) {
+                System.out.println("Mining interrupted externally.");
+                return false;
+            }
+
             this.nonce++;
             this.hash = calculateHash();
         }
         System.out.println("Block mined! Hash: " + this.hash);
+        return true;
+    }
 
+
+    public void stopMining() {
+        stopMining.set(true);
+        
     }
 
     public byte[] serialize() throws IOException {

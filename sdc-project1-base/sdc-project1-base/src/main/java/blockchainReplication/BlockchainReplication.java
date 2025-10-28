@@ -48,6 +48,9 @@ public class BlockchainReplication extends GenericProtocol {
     int numberOfRequestsPerBlock = 5;
     int difficulty = 4; //Podemos mudar a dificuldade
     private Blockchain blockchain = new Blockchain(difficulty);
+    private boolean isMining;
+    private Block currentMining;
+
 
 
     public BlockchainReplication() {
@@ -62,6 +65,7 @@ public class BlockchainReplication extends GenericProtocol {
         this.myPublicKey = null;
         this.myPrivateKey = null;
 
+        isMining = false;
     }
 
     @Override
@@ -92,8 +96,37 @@ public class BlockchainReplication extends GenericProtocol {
     private void onAppend(AppendRequest req, short fromProto) {
         pendingRequests.put(req.getRequestID(), req);
         //agreement.propose(req);
-        if(pendingRequests.size() >= numberOfRequestsPerBlock) {
-            sendBlock();
+        if(pendingRequests.size() >= numberOfRequestsPerBlock && !isMining) {
+            createBlock();
+            isMining = true;
+        }else{
+            System.out.println("Node mining...");
+        }
+
+    }
+
+    private void createBlock() {
+        List<AppendRequest> toInclude = new ArrayList<>(pendingRequests.values());
+
+        Block lastBlock = blockchain.getLastBlock();
+        Block newBlock = new Block(lastBlock.getHash(), toInclude);
+
+        //Minerar o bloco
+        if(blockchain.addBlock(newBlock)){
+            currentMining =  newBlock;
+        }
+
+
+    }
+
+    protected void broadCastBlock(Block block) {
+        try{
+            isMining = false;
+            AppendRequest lastRequest = block.getEntries().getLast();
+            BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), block.serialize());
+
+        }catch(Exception e){
+            System.out.println(e.getMessage());
         }
     }
 
@@ -123,34 +156,38 @@ public class BlockchainReplication extends GenericProtocol {
         }
     }
 
+
+
     private void onDeliverEntry(DeliverBroadcastedEntryNotification notification, short sourceProto) {
 
         try {
 
             Block block = Block.deserialize(notification.getClientRequest());
 
-            boolean validate = blockchain.addBlock(block);
-
-            if(validate) {
-                List<AppendRequest> toRemove = block.getEntries();
-                for(AppendRequest appendRequest : toRemove) {
-                    pendingRequests.remove(appendRequest.getRequestID());
-
-                    wait(1000);
-                    //Acho que esta mal criada
-                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
-                    triggerNotification(deliverEntryNotification);
-                }
-
+            if(blockchain.validateBlock(block)){
 
             }
+
+//            boolean validate = blockchain.addBlock(block);
+//
+//            if(validate) {
+//                List<AppendRequest> toRemove = block.getEntries();
+//                for(AppendRequest appendRequest : toRemove) {
+//                    pendingRequests.remove(appendRequest.getRequestID());
+//
+//                    //wait(1000);
+//                    //Acho que esta mal criada
+//                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+//                    triggerNotification(deliverEntryNotification);
+//                }
+//
+//
+//            }
 
 
 
         }catch (IOException e){
             System.out.println("Error: " + e.getMessage());
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
 
     }
@@ -175,6 +212,7 @@ public class BlockchainReplication extends GenericProtocol {
 
         registerSharedChannel(this.channelID);
         setDefaultChannel(this.channelID);
+    private void onNewView(NewViewNotification notification, short sourceProto) {
 
     }
 
