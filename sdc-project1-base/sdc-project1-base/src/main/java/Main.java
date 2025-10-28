@@ -10,6 +10,7 @@ import java.util.Enumeration;
 import java.util.Properties;
 
 import PBFT.PBFTAgreement;
+import blockchainBRB.ByzantineReliableBroadcastProtocol;
 import blockchainReplication.BlockchainReplication;
 import app.DistributedLogManager;
 import membership.staticmembership.StaticMembershipProtocol;
@@ -47,18 +48,21 @@ public class Main {
 
         //To simplify lets use this protocol again
         StaticMembershipProtocol smp = new StaticMembershipProtocol();
+        ByzantineReliableBroadcastProtocol brb = new ByzantineReliableBroadcastProtocol();
 
         babel.registerProtocol(dlm);
         babel.registerProtocol(rep);
         babel.registerProtocol(bcast);
 
         babel.registerProtocol(smp);
+        babel.registerProtocol(brb);
 
         dlm.init(props);
         rep.init(props);
         bcast.init(props);
 
         smp.init(props);
+        brb.init(props);
 
         babel.start();
         System.err.println("Babel has started...");

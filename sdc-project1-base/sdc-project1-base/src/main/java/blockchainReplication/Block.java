@@ -53,7 +53,6 @@ public class Block {
         }
         System.out.println("Block mined! Hash: " + this.hash);
 
-
     }
 
     public byte[] serialize() throws IOException {

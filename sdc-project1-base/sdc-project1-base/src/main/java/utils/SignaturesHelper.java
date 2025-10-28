@@ -1,11 +1,6 @@
 package utils;
 
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
-import java.security.PrivateKey;
-import java.security.PublicKey;
-import java.security.Signature;
-import java.security.SignatureException;
+import java.security.*;
 
 public class SignaturesHelper {
 
@@ -24,5 +19,15 @@ public class SignaturesHelper {
 		sig.update(value);
 		return sig.verify(signature);
 	}
+
+    public static byte[] digest(byte[] value) {
+
+        try {
+            return MessageDigest.getInstance("SHA-256").digest(value);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Erro ao calcular digest SHA-256", e);
+        }
+
+    }
 	
 }
