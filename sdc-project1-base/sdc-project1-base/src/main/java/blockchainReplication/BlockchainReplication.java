@@ -40,20 +40,17 @@ public class BlockchainReplication extends GenericProtocol {
 
     private int channelID;
 
-
     private PBFTAgreement agreement;
     private final Map<Long, AppendRequest> log;
     private final Queue<AppendRequest> pendingRequests;
     private final Map<String, List<Block>> subchains;
     private final List<AppendRequest> requestsBeingUsed;
 
-
     int numberOfRequestsPerBlock = 5;
     int difficulty = 3; //Podemos mudar a dificuldade
     private Blockchain blockchain = new Blockchain(difficulty);
     private boolean isMining;
     private Block currentMining;
-
 
     private static final int CONFIRMATION = 6;
 
@@ -88,7 +85,6 @@ public class BlockchainReplication extends GenericProtocol {
 
 //        registerMessageHandler(channelID, BlockchainReplyMessage.MESSAGE_ID, this::handleBlockchainReply);
 //        registerMessageHandler(channelID, BlockchainRequestMessage.MESSAGE_ID, this::handleRequestBlockchain);
-
 //        BlockchainRequestMessage requestBlockchainMsg = new BlockchainRequestMessage(mySelf);
 //        while(blockchain.getBlockchain().isEmpty()){
 //            for (Host h : neighbors) {
@@ -98,33 +94,29 @@ public class BlockchainReplication extends GenericProtocol {
 //                }
 //            }
 //        }
-
-
     }
-
 
     private void onAppend(AppendRequest req, short fromProto) {
         pendingRequests.add(req);
 
         //agreement.propose(req);
-        if(pendingRequests.size() >= numberOfRequestsPerBlock && !isMining) {
+        if (pendingRequests.size() >= numberOfRequestsPerBlock && !isMining) {
             createBlock();
             isMining = true;
-        }else{
+        } else {
             System.out.println("Node mining...");
         }
     }
 
-
     //Receiving a request to send the blockchain to another node
     private void handleRequestBlockchain(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
-        BlockchainRequestMessage msg =  (BlockchainRequestMessage) protoMessage;
+        BlockchainRequestMessage msg = (BlockchainRequestMessage) protoMessage;
 
         logger.info("Received blockchain request from " + sender.getAddress() + ": " + protoId);
 
-        if(this.publicKeys.containsKey(msg.getSender()) && !sender.equals(mySelf)) {
+        if (this.publicKeys.containsKey(msg.getSender()) && !sender.equals(mySelf)) {
             try {
-                if(!msg.checkSignature(this.publicKeys.get(msg.getSender()))){
+                if (!msg.checkSignature(this.publicKeys.get(msg.getSender()))) {
                     throw new Exception();
                 }
             } catch (Exception e) {
@@ -146,7 +138,7 @@ public class BlockchainReplication extends GenericProtocol {
     private void createBlock() {
         List<AppendRequest> toInclude = new ArrayList<>(pendingRequests);
 
-        for(int i = 0; i < numberOfRequestsPerBlock; i++){
+        for (int i = 0; i < numberOfRequestsPerBlock; i++) {
             AppendRequest removed = pendingRequests.remove();
             toInclude.add(removed);
             requestsBeingUsed.add(removed);
@@ -161,18 +153,17 @@ public class BlockchainReplication extends GenericProtocol {
     }
 
     public void broadCastBlock(Block block) {
-        try{
+        try {
             isMining = false;
             AppendRequest lastRequest = block.getEntries().getLast();
             BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), block.serialize());
 
             sendRequest(broadcastRequest, underlyingLayer);
 
-        }catch(Exception e){
+        } catch (Exception e) {
             System.out.println(e.getMessage());
         }
     }
-
 
     private void sendBlock() {
         try {
@@ -185,30 +176,28 @@ public class BlockchainReplication extends GenericProtocol {
 
             //start mining the new block
             //newBlock.mineBlock(difficulty);
-
-
             //if (accepted) {
-                //Não sei bem como colocar o id, mas pronto (pus tudo do ultimo pedido da lista do bloco)
+            //Não sei bem como colocar o id, mas pronto (pus tudo do ultimo pedido da lista do bloco)
             AppendRequest lastRequest = newBlock.getEntries().getLast();
             BroadcastRequest broadcastRequest = new BroadcastRequest(lastRequest.getRequestID().toString(), lastRequest.getClientID(), lastRequest.getSource(), newBlock.serialize());
             //}
 
-        }catch (IOException e){
+        } catch (IOException e) {
             System.out.println("Error: " + e.getMessage());
         }
     }
-
-
 
     private void onBroadcastedBlockNotification(DeliverBroadcastedEntryNotification notification, short sourceProto) {
 
         try {
 
-            Block block = Block.deserialize(notification.getClientRequest());
+            BroadcastRequest breq = BroadcastRequest.deserialize(notification.getClientRequest());
 
-            if(blockchain.validateBlock(block)) {
+            Block block = Block.deserialize(breq.getClientRequest());
 
-                if(isMining) {
+            if (blockchain.validateBlock(block)) {
+
+                if (isMining) {
                     currentMining.stopMining();
 
                     for (AppendRequest appendRequest : currentMining.getEntries()) {
@@ -221,12 +210,15 @@ public class BlockchainReplication extends GenericProtocol {
                 }
                 blockchain.addMinedBlock(block);
 
+                System.out.println("Block received from broadcast and added to the chain: " + block.getHash());
+
                 Block newConfirmed = blockchain.getNewValidBlock(CONFIRMATION);
 
                 for (AppendRequest appendRequest : newConfirmed.getEntries()) {
                     //Faz mais sentido fazer aqui, ou enviar o bloco para o LogManager?
                     DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
                     triggerNotification(deliverEntryNotification);
+                    System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
                     wait(3000);
                 }
 
@@ -245,14 +237,13 @@ public class BlockchainReplication extends GenericProtocol {
                     subchains.remove(newConfirmed.getPreviousHash());
                 }
 
-            }else if(blockchain.alreadyLastBlock(block)){
+            } else if (blockchain.alreadyLastBlock(block)) {
                 logger.info("Block already at last place in the chain");
-            }else{
+            } else {
                 checkFork(block);
             }
 
-
-        }catch (IOException e){
+        } catch (IOException e) {
             System.out.println("Error: " + e.getMessage());
         } catch (InterruptedException e) {
             throw new RuntimeException(e);
@@ -261,16 +252,18 @@ public class BlockchainReplication extends GenericProtocol {
     }
 
     public void checkFork(Block block) {
-        if(blockchain.isForkInit(block)){
+        if (blockchain.isForkInit(block)) {
             List<Block> newSubchain = new ArrayList<>();
             newSubchain.add(block);
             subchains.put(block.getPreviousHash(), newSubchain);
-        }else{
-            for(List<Block> subchain : subchains.values()){
-                if(block.getPreviousHash().equals(subchain.getLast().getHash())){
+            System.out.println("Fork identified: " + block.getHash());
+        } else {
+            for (List<Block> subchain : subchains.values()) {
+                if (block.getPreviousHash().equals(subchain.getLast().getHash())) {
                     subchain.add(block);
                 }
             }
+            System.out.println("New block on subchain: " + block.getHash());
         }
     }
 
@@ -281,6 +274,7 @@ public class BlockchainReplication extends GenericProtocol {
                 () -> {
 
                     blockchain.addMinedBlock(newBlock);
+                    System.out.println("Block added to blockchain: " + newBlock.getHash());
                     broadCastBlock(newBlock);
                 },
                 () -> {
@@ -289,11 +283,8 @@ public class BlockchainReplication extends GenericProtocol {
                 }
         );
 
-        System.out.println("Block added to blockchain: " + newBlock.getHash());
         return true;
     }
-
-
 
     public List<AppendRequest> getStateMachineLog() {
         return new ArrayList<>(log.values());
@@ -324,4 +315,3 @@ public class BlockchainReplication extends GenericProtocol {
         this.publicKeys.put(notification.getNeighbor(), notification.getPublicKey());
     }
 }
-

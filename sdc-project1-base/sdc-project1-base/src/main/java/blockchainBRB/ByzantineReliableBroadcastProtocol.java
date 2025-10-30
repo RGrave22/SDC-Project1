@@ -66,7 +66,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     private HashMap<String, Boolean> sentReady;
     private HashMap<String, HashSet<Host>> readys;
 
-
     public ByzantineReliableBroadcastProtocol() {
         super(PROTO_NAME, PROTO_ID);
 
@@ -95,14 +94,16 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     @Override
     public void init(Properties props) throws HandlerRegistrationException, IOException {
 
-        if (!props.containsKey(PAR_MYHOST) || !props.containsKey(PAR_NEIGHBORS) || ! props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
-            if (!props.contains(PAR_MYHOST))
+        if (!props.containsKey(PAR_MYHOST) || !props.containsKey(PAR_NEIGHBORS) || !props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
+            if (!props.contains(PAR_MYHOST)) {
                 System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter: " + PAR_MYHOST
                         + " (format: IP:PORT)");
-            if (!props.containsKey(PAR_NEIGHBORS))
+            }
+            if (!props.containsKey(PAR_NEIGHBORS)) {
                 System.err.println("Protocol " + PROTO_NAME + " requires mandatory parameter: " + PAR_NEIGHBORS
                         + " (format: IP:PORT,IP:PORT,...,IP:PORT");
-            if(!props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
+            }
+            if (!props.containsKey(Crypto.CRYPTO_NAME_KEY)) {
                 System.err.println("Protocol " + PROTO_NAME + " requires mandatory paramter " + Crypto.CRYPTO_NAME_KEY);
             }
             System.exit(1);
@@ -162,7 +163,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         for (Host h : this.candidates) {
             //This is a simple hack to ensure that only the node with highest port starts establishing the protocol
-            if(h.getPort() < myself.getPort()) {
+            if (h.getPort() < myself.getPort()) {
                 openConnection(h);
             }
         }
@@ -181,7 +182,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     }
 
     private void handleBroadcastRequest(ProtoRequest protoRequest, short protoId) {
-        try{
+        try {
             BroadcastRequest req = (BroadcastRequest) protoRequest;
 
             byte[] bs = req.getClientRequest();
@@ -195,7 +196,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             String mid = MessageIdHelper.generateUniqueID(msg, timestamp);
 
             logger.info("Received BroadcastRequest from client {}: BlockHash'{}', generated MID={}",
-                     req.getClientID(), msg, mid);
+                    req.getClientID(), msg, mid);
 
             byte[] brPayload = req.serialize();
 
@@ -228,11 +229,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
     private void uponReceiveReadyMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBReadyMessage msg = (BRBReadyMessage) protoMessage;
-        logger.info("Received READY: " + msg.getPayload() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
+        //logger.info("Received READY: " + msg.getPayload() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
-        if(this.publicKeys.containsKey(msg.getSender()) && !sender.equals(myself)) {
+        if (this.publicKeys.containsKey(msg.getSender()) && !sender.equals(myself)) {
             try {
-                if(!msg.checkSignature(this.publicKeys.get(msg.getSender()))){
+                if (!msg.checkSignature(this.publicKeys.get(msg.getSender()))) {
                     throw new Exception();
                 }
             } catch (Exception e) {
@@ -251,11 +252,10 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         readys.putIfAbsent(mid, new HashSet<>());
         HashSet<Host> readyHosts = readys.get(mid);
 
-        if(!readyHosts.contains(sender)) {
+        if (!readyHosts.contains(sender)) {
             readyHosts.add(sender);
 
-            System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size() + " PARA O ID: " + msg.getMessageId());
-
+            //System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size() + " PARA O ID: " + msg.getMessageId());
 
             int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
@@ -270,12 +270,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                     for (Host h : neighbors.keySet()) {
                         sendMessage(readyMsg, h);
                     }
-                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException |
-                         InvalidKeyException e) {
+                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException
+                        | InvalidKeyException e) {
                     throw new RuntimeException(e);
                 }
             }
-
 
             if (!delivered.contains(mid) && (readyHosts.size() > 2 * f)) {
                 delivered.add(mid);
@@ -305,11 +304,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
     private void uponReceiveEchoMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBEchoMessage msg = (BRBEchoMessage) protoMessage;
-        logger.info("Received ECHO: " + msg.getPayload().toString() + "ID: " + msg.getMessageId() + "HOST: " + sender.getAddress() + ":" + sender.getPort());
+        //logger.info("Received ECHO: " + msg.getPayload().toString() + "ID: " + msg.getMessageId() + "HOST: " + sender.getAddress() + ":" + sender.getPort());
 
         System.out.println(publicKeys.keySet());
 
-        if(this.publicKeys.containsKey(msg.getSender()) && !msg.getSender().equals(myself)) {
+        if (this.publicKeys.containsKey(msg.getSender()) && !msg.getSender().equals(myself)) {
             try {
                 if (!msg.checkSignature(publicKeys.get(sender))) {
                     System.err.println("Assinatura inválida do echo de " + sender);
@@ -325,14 +324,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
         }
 
-
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
 
-
         echoMsgs.putIfAbsent(mid, new HashSet<>());
         HashSet<Host> echoes = echoMsgs.get(mid);
-
 
         if (!echoes.contains(sender)) {
             echoes.add(sender);
@@ -341,7 +337,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
             // TODO IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
-            if ((echoes.size() >= ((2*f) + 1)) && !sentReady.get(mid)) {
+            if ((echoes.size() >= ((2 * f) + 1)) && !sentReady.get(mid)) {
 
                 try {
 
@@ -353,15 +349,15 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                     for (Host h : neighbors.keySet()) {
                         if (!h.equals(myself)) {
-                            System.out.println("Sent READY TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
+                            //System.out.println("Sent READY TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                             sendMessage(readyMsg, h);
                         }
                     }
 
                     uponReceiveReadyMessage(readyMsg, myself, protoId, channel);
 
-                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException |
-                         InvalidKeyException e) {
+                } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException
+                        | InvalidKeyException e) {
                     throw new RuntimeException(e);
                 } catch (Exception e) {
                     e.printStackTrace();
@@ -370,21 +366,20 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         }
     }
 
-
     private void uponReceiveSendMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBSendMessage msg = (BRBSendMessage) protoMessage;
-        System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
+        // System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
 
-        System.out.println("KEYSET: " + publicKeys.keySet());
+        // System.out.println("KEYSET: " + publicKeys.keySet());
 
-        System.out.println("Sender da msg: " + msg.getSender());
-        System.out.println("mySelf: " + myself);
-        System.out.println("sender: " + sender);
+        // System.out.println("Sender da msg: " + msg.getSender());
+        // System.out.println("mySelf: " + myself);
+        // System.out.println("sender: " + sender);
 
-        if(this.publicKeys.containsKey(msg.getSender())) {
+        if (this.publicKeys.containsKey(msg.getSender())) {
             try {
                 if (!msg.checkSignature(this.publicKeys.get(msg.getSender()))) {
                     throw new Exception();
@@ -394,30 +389,27 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                 e.printStackTrace();
             }
         } else if (msg.getSender().equals(myself)) {
-                logger.info("Message received from myself, no need to check the signature.");
+            logger.info("Message received from myself, no need to check the signature.");
         } else {
-                logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
+            logger.warn("I do not know the public key of " + msg.getSender() + " to validate the message.");
         }
 
         echoMsgs.putIfAbsent(mid, new HashSet<>());
 
         HashSet<Host> echoes = echoMsgs.get(mid);
 
-        if(!echoes.contains(myself)) {
+        if (!echoes.contains(myself)) {
             echoes.add(myself);
-
 
             BRBEchoMessage echoMsg = new BRBEchoMessage(myself, mid, payload);
 
             try {
                 echoMsg.signMessage(privateKey);
 
-
-
                 for (Host h : neighbors.keySet()) {
                     if (!h.equals(myself)) {
                         //logger.info("Sent BRBEchoMessage MID={} to {}", mid, h);
-                        System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
+                        // System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                         sendMessage(echoMsg, h);
                     }
                 }
@@ -430,14 +422,9 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             uponReceiveEchoMessage(echoMsg, myself, protoId, channel);
         }
 
-
     }
 
-
-
-
     /* --------------------------------- Message Handlers for StaticMembership ---------------------------- */
-
     private void uponReceiveHelloMessage(HelloMessage msg, Host sender, short protoID, int channel) {
         if (!sender.equals(msg.getSender())) {
             logger.error("Received a HelloMessage from the socker of " + sender + " issued by " + msg.getSender());
@@ -466,7 +453,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         try {
             hrm.signMessage(privateKey);
-            sendMessage(hrm , msg.getSender());
+            sendMessage(hrm, msg.getSender());
         } catch (Exception e) {
             e.printStackTrace();
         }
@@ -560,14 +547,12 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
     }
 
     /*--------------------------------- Channel Events ----------------------------*/
-
-
     private void uponOutConnectionDown(OutConnectionDown event, int channelId) {
         logger.info("Host {} is down, cause: {}", event.getNode(), event.getCause());
-        if(neighbors.size() > MIN_NEIGHBORS) { //To ensure we always work with at least 4 nodes.
-            if (this.candidates.contains(event.getNode()))
-                this.candidates.remove(event.getNode());
-            else if (this.neighbors.containsKey(event.getNode())) {
+        if (neighbors.size() > MIN_NEIGHBORS) { //To ensure we always work with at least 4 nodes.
+            if (this.candidates.contains(event.getNode())) {
+                this.candidates.remove(event.getNode()); 
+            }else if (this.neighbors.containsKey(event.getNode())) {
                 this.neighbors.remove(event.getNode());
             }
         }
@@ -589,7 +574,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             HelloMessage hm = new HelloMessage(myself, publicKey, this.issuedChallenges.get(event.getNode()));
             try {
                 hm.signMessage(privateKey);
-                sendMessage(hm,event.getNode());
+                sendMessage(hm, event.getNode());
                 logger.info("Out connection is up for " + event.getNode() + " sent challenge...");
             } catch (Exception e) {
                 e.printStackTrace();

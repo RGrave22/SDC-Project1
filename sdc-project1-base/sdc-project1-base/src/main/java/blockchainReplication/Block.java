@@ -1,20 +1,18 @@
 package blockchainReplication;
 
-import blockchainBRB.requests.AppendRequest;
-import app.messages.client.LogEntry;
-import io.netty.buffer.ByteBuf;
-import io.netty.buffer.Unpooled;
-import io.netty.util.internal.StringUtil;
-import utils.Crypto;
-
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+import blockchainBRB.requests.AppendRequest;
+import io.netty.buffer.ByteBuf;
+import io.netty.buffer.Unpooled;
+import utils.Crypto;
+
 public class Block {
+
     private final String previousHash;
     private final List<AppendRequest> entries;
     private final long timestamp;
@@ -43,14 +41,20 @@ public class Block {
         this.nonce = nonce;
     }
 
+    public Block(String previousHash, List<AppendRequest> entries, long timestamp, int nonce, String hash) {
+        this.previousHash = previousHash;
+        this.entries = new ArrayList<>(entries);
+        this.timestamp = timestamp;
+        this.hash = hash;
+        this.nonce = nonce;
+    }
 
     public String calculateHash() {
         String dataToHash = previousHash + Long.toString(timestamp) + Integer.toString(nonce) + entries.toString();
         return Crypto.applySha256(dataToHash);
     }
-    
-    
-    public void mineBlock(int difficulty, Runnable onFinish, Runnable onCancel){
+
+    public void mineBlock(int difficulty, Runnable onFinish, Runnable onCancel) {
         stopMining.set(false);
         paused = false;
         miningThread = new Thread(() -> {
@@ -64,10 +68,10 @@ public class Block {
         miningThread.start();
     }
 
-
-
     private boolean mineBlockThread(int difficulty) {
-        if (difficulty < 0) throw new IllegalArgumentException("difficulty must be >= 0");
+        if (difficulty < 0) {
+            throw new IllegalArgumentException("difficulty must be >= 0");
+        }
         final String targetPrefix = "0".repeat(difficulty);
         // Garante que o hash está alinhado com o nonce atual
         this.hash = calculateHash();
@@ -85,10 +89,9 @@ public class Block {
         return true;
     }
 
-
     public void stopMining() {
         stopMining.set(true);
-        
+
     }
 
     public byte[] serialize2() throws IOException {
@@ -98,7 +101,7 @@ public class Block {
 
         List<byte[]> blobs = new ArrayList<>(entries.size());
         for (AppendRequest ar : entries) {
-            blobs.add(AppendRequest.serialize2(ar,buf));
+            blobs.add(AppendRequest.serialize2(ar, buf));
         }
 
         buf.writeInt(prev.length);
@@ -134,12 +137,15 @@ public class Block {
             buf.writeBytes(serialized);
         }
 
+        byte[] current = hash.getBytes(StandardCharsets.UTF_8);
+        buf.writeInt(current.length);
+        buf.writeBytes(current);
+
         byte[] out = new byte[buf.readableBytes()];
         buf.readBytes(out);
         buf.release();
         return out;
     }
-
 
     public static Block deserialize2(byte[] data) throws IOException {
         ByteBuf buf = Unpooled.wrappedBuffer(data);
@@ -183,16 +189,19 @@ public class Block {
             byte[] eb = new byte[len];
             buf.readBytes(eb);
 
-
             ByteBuf entryBuf = Unpooled.wrappedBuffer(eb);
             list.add(AppendRequest.deserialize(entryBuf));
             entryBuf.release();
         }
 
-        buf.release();
-        return new Block(previousHash, list, timestamp, nonce);
-    }
+        int currentLen = buf.readInt();
+        byte[] cur = new byte[currentLen];
+        buf.readBytes(cur);
+        String hash = new String(cur, StandardCharsets.UTF_8);
 
+        buf.release();
+        return new Block(previousHash, list, timestamp, nonce, hash);
+    }
 
     public String getPreviousHash() {
         return previousHash;

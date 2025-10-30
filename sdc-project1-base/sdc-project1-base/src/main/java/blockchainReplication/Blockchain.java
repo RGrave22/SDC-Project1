@@ -1,13 +1,9 @@
 package blockchainReplication;
 
-import blockchainBRB.requests.AppendRequest;
-import app.messages.client.LogEntry;
-
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
+import blockchainBRB.requests.AppendRequest;
 
 public class Blockchain {
 
@@ -35,17 +31,15 @@ public class Blockchain {
 //        newBlock.mineBlock(difficulty);
 //        blockchain.add(newBlock);
 //    }
-
     //add a new block (received from other node/miner)
-    public void addMinedBlock(Block newBlock){
+    public void addMinedBlock(Block newBlock) {
         blockchain.add(newBlock);
     }
 
     //get a block that has already been confirmed in the chain (according to the value determined in the replication protocol)
-    public Block getNewValidBlock(int positionBehind){
-        return blockchain.get(blockchain.size()-1 - positionBehind);
+    public Block getNewValidBlock(int positionBehind) {
+        return blockchain.get(blockchain.size() - 1 - positionBehind);
     }
-
 
     public boolean isChainValid() {
         Block currentBlock;
@@ -78,19 +72,25 @@ public class Blockchain {
         }
     }
 
-    public boolean isForkInit(Block block){
+    public boolean isForkInit(Block block) {
         return block.getPreviousHash().equals(blockchain.get(blockchain.size() - 2).getHash());
     }
 
-    public boolean alreadyLastBlock(Block block){
+    public boolean alreadyLastBlock(Block block) {
         return block.getHash().equals(blockchain.get(blockchain.size() - 1).getHash());
     }
 
     public boolean validateBlock(Block block) {
         //validate block hash
-        if(!block.getHash().substring(0, difficulty).equals("0".repeat(difficulty))) return false;
+        if (!block.getHash().substring(0, difficulty).equals("0".repeat(difficulty))) {
+            System.out.println("Malicious block: " + block.getHash());
+            return false;
+        }
         //validate previous hash
-        if(!block.getPreviousHash().equals(getLastBlock().getHash())) return false;
+        if (!block.getPreviousHash().equals(getLastBlock().getHash())) {
+            System.out.println("Fork: " + block.getHash());
+            return false;
+        }
         return block.getHash().equals(block.calculateHash());
     }
 

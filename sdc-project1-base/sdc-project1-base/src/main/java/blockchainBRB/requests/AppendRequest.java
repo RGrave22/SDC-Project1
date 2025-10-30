@@ -1,14 +1,18 @@
 package blockchainBRB.requests;
 
+import java.io.IOException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.SignatureException;
+import java.util.UUID;
+
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
 import pt.unl.fct.di.novasys.babel.generic.ProtoRequest;
 import pt.unl.fct.di.novasys.network.data.Host;
 import utils.SignaturesHelper;
-
-import java.io.IOException;
-import java.security.*;
-import java.util.UUID;
 
 public class AppendRequest extends ProtoRequest {
 
@@ -130,8 +134,11 @@ public class AppendRequest extends ProtoRequest {
         } else {
             out.writeInt(0);
         }
-        byte[] result = new byte[out.readableBytes()];
-        out.readBytes(result);
+        byte[] result = new byte[out.writerIndex()];
+        out.getBytes(0, result);
+
+        out.release();
+
         return result;
     }
 
@@ -156,7 +163,6 @@ public class AppendRequest extends ProtoRequest {
         }
 
         //long seqno = in.readLong();
-
         return new AppendRequest(reqID, clientID, source, data, sig);
     }
 
