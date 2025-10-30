@@ -44,24 +44,24 @@ public class Main {
 
         DistributedLogManager dlm = new DistributedLogManager();
         BlockchainReplication rep = new BlockchainReplication();
-        PBFTAgreement bcast = new PBFTAgreement();
+        //PBFTAgreement bcast = new PBFTAgreement();
 
         //To simplify lets use this protocol again
-        StaticMembershipProtocol smp = new StaticMembershipProtocol();
+        //StaticMembershipProtocol smp = new StaticMembershipProtocol();
         ByzantineReliableBroadcastProtocol brb = new ByzantineReliableBroadcastProtocol();
 
         babel.registerProtocol(dlm);
         babel.registerProtocol(rep);
-        babel.registerProtocol(bcast);
+        //babel.registerProtocol(bcast);
 
-        babel.registerProtocol(smp);
+        //babel.registerProtocol(smp);
         babel.registerProtocol(brb);
 
         dlm.init(props);
         rep.init(props);
-        bcast.init(props);
+        //bcast.init(props);
 
-        smp.init(props);
+        //smp.init(props);
         brb.init(props);
 
         babel.start();

@@ -25,6 +25,8 @@
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/ByzantineReliableBroadcastProtocol.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/PBFT/messages/PrepareMessage.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/app/messages/client/AppendToLog.java
+/home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/messages/BlockchainRequestMessage.java
+/home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/messages/BlockchainReplyMessage.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/messages/HelloReplyMessage.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/utils/Crypto.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/utils/PublicKeyHelper.java
@@ -38,5 +40,6 @@
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/messages/HelloMessage.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/common/events/NeighborUp.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/common/events/NeighborDown.java
+/home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/blockchainBRB/requests/AppendRequest.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/app/messages/client/LogEntry.java
 /home/goncalo/SDC/SDC-Project1/sdc-project1-base/sdc-project1-base/src/main/java/common/events/ChannelAvailable.java

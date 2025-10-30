@@ -1,10 +1,12 @@
 package blockchainReplication;
 
-import PBFT.requests.AppendRequest;
+import blockchainBRB.requests.AppendRequest;
 import app.messages.client.LogEntry;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 
 public class Blockchain {
@@ -20,19 +22,12 @@ public class Blockchain {
         // Genesis block
         List<AppendRequest> logEntries = new ArrayList<>();
         String hash = "0";
-        Block genesisBlock = new Block(hash, logEntries);
-        genesisBlock.mineBlock(
-                4,
-                () -> {
-                    blockchain.add(genesisBlock);
-                    System.out.println("Genesis block added: " + genesisBlock.getHash());
-                },
-                () -> {
-                    System.out.println("Mineration was canceled!");
-                    //logica para quando a mineração é cancelada (normalmente quando um bloco novo chega)
-                }
-        );
+        long timestamp = 0L; // Timestamp fixo
+        int genesisNonce = 111111;
+        Block genesisBlock = new Block(hash, logEntries, timestamp, genesisNonce);
 
+        blockchain.add(genesisBlock);
+        System.out.println("Genesis block added: " + genesisBlock.getHash());
     }
 
 //    public void addBlock(Block newBlock) {
@@ -41,29 +36,16 @@ public class Blockchain {
 //        blockchain.add(newBlock);
 //    }
 
-    public synchronized boolean addBlock(Block newBlock) {
-        Block lastBlock = getLastBlock();
-
-        //É suposto validar o bloco aqui?
-        if (!validateBlock(newBlock)) {
-            System.out.println("Block invalid");
-            return false;
-        }
-
-        newBlock.mineBlock(
-                4,
-                () -> {
-                    blockchain.add(newBlock);
-                },
-                () -> {
-                    System.out.println("Mineration was canceled!");
-                    //logica para quando a mineração é cancelada (normalmente quando um bloco novo chega)
-                }
-        );
-
-        System.out.println("Block added to blockchain: " + newBlock.getHash());
-        return true;
+    //add a new block (received from other node/miner)
+    public void addMinedBlock(Block newBlock){
+        blockchain.add(newBlock);
     }
+
+    //get a block that has already been confirmed in the chain (according to the value determined in the replication protocol)
+    public Block getNewValidBlock(int positionBehind){
+        return blockchain.get(blockchain.size()-1 - positionBehind);
+    }
+
 
     public boolean isChainValid() {
         Block currentBlock;
@@ -96,7 +78,19 @@ public class Blockchain {
         }
     }
 
+    public boolean isForkInit(Block block){
+        return block.getPreviousHash().equals(blockchain.get(blockchain.size() - 2).getHash());
+    }
+
+    public boolean alreadyLastBlock(Block block){
+        return block.getHash().equals(blockchain.get(blockchain.size() - 1).getHash());
+    }
+
     public boolean validateBlock(Block block) {
+        //validate block hash
+        if(!block.getHash().substring(0, difficulty).equals("0".repeat(difficulty))) return false;
+        //validate previous hash
+        if(!block.getPreviousHash().equals(getLastBlock().getHash())) return false;
         return block.getHash().equals(block.calculateHash());
     }
 

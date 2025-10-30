@@ -1,3 +1,5 @@
+blockchainBRB/messages/BlockchainReplyMessage.class
+blockchainBRB/messages/BlockchainReplyMessage$1.class
 blockchainBRB/requests/BroadcastRequest.class
 PBFT/messages/PrePrepareMessage.class
 app/DistributedLogManager.class
@@ -8,6 +10,7 @@ app/messages/client/LogEntry.class
 PBFT/notifications/NewViewNotification.class
 membership/staticmembership/message/ReplyMessage.class
 membership/staticmembership/message/HelloReplyMessage.class
+blockchainBRB/requests/AppendRequest.class
 blockchainReplication/BlockchainReplication.class
 PBFT/notifications/DeliverEntryNotification.class
 blockchainBRB/messages/ReplyMessage.class
@@ -22,6 +25,7 @@ PBFT/requests/AppendRequest.class
 common/events/NeighborUp.class
 blockchainBRB/messages/HelloReplyMessage.class
 PBFT/messages/NewViewMessage.class
+blockchainBRB/messages/BlockchainRequestMessage.class
 membership/staticmembership/message/HelloMessage$1.class
 PBFT/messages/ViewChangeMessage.class
 blockchainBRB/messages/BRBEchoMessage$1.class
@@ -49,6 +53,7 @@ app/messages/client/AppendToLogReply.class
 blockchainReplication/Block.class
 membership/staticmembership/message/ReplyMessage$1.class
 app/messages/client/AppendToLog.class
+blockchainBRB/messages/BlockchainRequestMessage$1.class
 PBFT/PBFTAgreement.class
 blockchainBRB/messages/BRBEchoMessage.class
 app/messages/client/AppendToLog$1.class

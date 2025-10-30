@@ -1,6 +1,6 @@
 package blockchainReplication;
 
-import PBFT.requests.AppendRequest;
+import blockchainBRB.requests.AppendRequest;
 import app.messages.client.LogEntry;
 import io.netty.buffer.ByteBuf;
 import io.netty.buffer.Unpooled;
@@ -54,15 +54,17 @@ public class Block {
         stopMining.set(false);
         paused = false;
         miningThread = new Thread(() -> {
-            boolean completed = mineBlockThread(difficulty); // retorna true se terminou
+            boolean completed = mineBlockThread(difficulty);
             if (completed && onFinish != null) {
-                onFinish.run(); // 👈 chamada quando termina com sucesso
+                onFinish.run(); // chamada quando termina com sucesso
             } else if (!completed && onCancel != null) {
-                onCancel.run(); // 👈 chamada quando é cancelado
+                onCancel.run(); // chamada quando é cancelado
             }
         });
         miningThread.start();
     }
+
+
 
     private boolean mineBlockThread(int difficulty) {
         if (difficulty < 0) throw new IllegalArgumentException("difficulty must be >= 0");
@@ -89,7 +91,7 @@ public class Block {
         
     }
 
-    public byte[] serialize() throws IOException {
+    public byte[] serialize2() throws IOException {
         ByteBuf buf = Unpooled.buffer();
 
         byte[] prev = previousHash.getBytes();
@@ -114,11 +116,33 @@ public class Block {
         return out;
     }
 
-    public static Block deserialize(byte[] data) throws IOException {
-        ByteBuf buf = Unpooled.wrappedBuffer(data);
+    public byte[] serialize() throws IOException {
+        ByteBuf buf = Unpooled.buffer();
 
-        int version = buf.readInt();
-        if (version != 1) throw new IllegalArgumentException("Unsupported version: " + version);
+        byte[] prev = previousHash.getBytes(StandardCharsets.UTF_8);
+
+        buf.writeInt(prev.length);
+        buf.writeBytes(prev);
+        buf.writeLong(timestamp);
+        buf.writeInt(nonce);
+        buf.writeInt(entries.size());
+
+        // Serializa e escreve diretamente
+        for (AppendRequest ar : entries) {
+            byte[] serialized = AppendRequest.serialize2(ar, Unpooled.buffer());
+            buf.writeInt(serialized.length);
+            buf.writeBytes(serialized);
+        }
+
+        byte[] out = new byte[buf.readableBytes()];
+        buf.readBytes(out);
+        buf.release();
+        return out;
+    }
+
+
+    public static Block deserialize2(byte[] data) throws IOException {
+        ByteBuf buf = Unpooled.wrappedBuffer(data);
 
         int prevLen = buf.readInt();
         byte[] prev = new byte[prevLen];
@@ -139,6 +163,36 @@ public class Block {
 
         return new Block(previousHash, list, timestamp, nonce);
     }
+
+    public static Block deserialize(byte[] data) throws IOException {
+        ByteBuf buf = Unpooled.wrappedBuffer(data);
+
+        int prevLen = buf.readInt();
+        byte[] prev = new byte[prevLen];
+        buf.readBytes(prev);
+        String previousHash = new String(prev, StandardCharsets.UTF_8);
+
+        long timestamp = buf.readLong();
+        int nonce = buf.readInt();
+
+        int n = buf.readInt();
+        List<AppendRequest> list = new ArrayList<>(n);
+
+        for (int i = 0; i < n; i++) {
+            int len = buf.readInt();
+            byte[] eb = new byte[len];
+            buf.readBytes(eb);
+
+
+            ByteBuf entryBuf = Unpooled.wrappedBuffer(eb);
+            list.add(AppendRequest.deserialize(entryBuf));
+            entryBuf.release();
+        }
+
+        buf.release();
+        return new Block(previousHash, list, timestamp, nonce);
+    }
+
 
     public String getPreviousHash() {
         return previousHash;
