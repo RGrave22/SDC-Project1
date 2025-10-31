@@ -99,6 +99,14 @@ public class Blockchain {
         return isValidHash;
     }
 
+
+    public void removeNotValid(String hash){
+        while(blockchain.getLast().getPreviousHash().equals(hash)){
+            blockchain.remove(blockchain.size() - 1);
+        }
+    }
+
+
     public Block getLastBlock() {
         return blockchain.get(blockchain.size() - 1);
     }

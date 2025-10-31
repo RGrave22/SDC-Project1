@@ -267,10 +267,45 @@ public class BlockchainReplication extends GenericProtocol {
             subchains.put(block.getPreviousHash(), newSubchain);
             System.out.println("Fork identified: " + block.getHash());
         } else {
-            for (List<Block> subchain : subchains.values()) {
+            for (Map.Entry<String, List<Block>> entry : subchains.entrySet()) {
+                List<Block> subchain = entry.getValue();
+
                 if (block.getPreviousHash().equals(subchain.getLast().getHash())) {
                     subchain.add(block);
                     System.out.println("New block on subchain: " + block.getHash());
+
+                    //TODO Verificar se é suposto ser esta condição
+                    if(subchain.size() > CONFIRMATION){
+                        System.out.println("Subchain confirmed!");
+                        //Ver tambem se este not valid esta bom
+                        blockchain.removeNotValid(entry.getKey());
+
+                        for(Block b : subchain){
+                            blockchain.addMinedBlock(b);
+                        }
+
+                        subchains.remove(entry.getKey());
+
+                        try {
+                            
+                            Block newConfirmed = blockchain.getNewValidBlock(CONFIRMATION);
+
+                            if (newConfirmed != null) {
+
+                                for (AppendRequest appendRequest : newConfirmed.getEntries()) {
+                                    //Faz mais sentido fazer aqui, ou enviar o bloco para o LogManager?
+                                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+                                    triggerNotification(deliverEntryNotification);
+                                    System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
+                                    wait(3000);
+                                }
+
+                            }
+                        }catch (Exception e){
+                            System.out.println("Error: " + e.getMessage());
+                        }
+
+                    }
                     break;
                 }
             }
