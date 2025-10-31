@@ -26,7 +26,6 @@ app\measurements\OneMeasurementHdrHistogram.class
 app\messages\client\messages\AppendToLogReply.class
 utils\SignaturesHelper.class
 app\messages\client\messages\AppendToLog$1.class
-app\measurements\Measurements$2.class
 app\measurements\Measurements$MeasurementType.class
 app\measurements\Measurements.class
 app\measurements\OneMeasurementRaw.class

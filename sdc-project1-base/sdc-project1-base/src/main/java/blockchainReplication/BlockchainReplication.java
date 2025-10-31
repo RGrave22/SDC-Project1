@@ -46,18 +46,20 @@ public class BlockchainReplication extends GenericProtocol {
     private final Map<String, List<Block>> subchains;
     private final List<AppendRequest> requestsBeingUsed;
 
-    int numberOfRequestsPerBlock = 5;
-    int difficulty = 3; //Podemos mudar a dificuldade
-    private Blockchain blockchain = new Blockchain(difficulty);
+    private final int numberOfRequestsPerBlock = 5;
+    private final int difficulty = 6; //Podemos mudar a dificuldade
+    private final Blockchain blockchain;
     private boolean isMining;
     private Block currentMining;
 
-    private static final int CONFIRMATION = 6;
+    private static final int CONFIRMATION = 3;
 
     public BlockchainReplication() {
         super(PROTO_NAME, PROTO_ID);
         this.log = new TreeMap<>();
         this.pendingRequests = new LinkedList<>();
+
+        this.blockchain = new Blockchain(difficulty);
 
         neighbors = new HashSet<Host>();
         publicKeys = new HashMap<Host, PublicKey>();
@@ -136,7 +138,7 @@ public class BlockchainReplication extends GenericProtocol {
     }
 
     private void createBlock() {
-        List<AppendRequest> toInclude = new ArrayList<>(pendingRequests);
+        List<AppendRequest> toInclude = new ArrayList<>();
 
         for (int i = 0; i < numberOfRequestsPerBlock; i++) {
             AppendRequest removed = pendingRequests.remove();
@@ -195,7 +197,12 @@ public class BlockchainReplication extends GenericProtocol {
 
             Block block = Block.deserialize(breq.getClientRequest());
 
-            if (blockchain.validateBlock(block)) {
+            System.out.println("Block check hash when received: " + block.getHash() + ": " + block.calculateHash());
+            System.out.println("Block check all: " + block.toString());
+
+            if (blockchain.alreadyLastBlock(block)) {
+                logger.info("Block already at last place in the chain");
+            } else if (blockchain.validateBlock(block)) {
 
                 if (isMining) {
                     currentMining.stopMining();
@@ -214,31 +221,33 @@ public class BlockchainReplication extends GenericProtocol {
 
                 Block newConfirmed = blockchain.getNewValidBlock(CONFIRMATION);
 
-                for (AppendRequest appendRequest : newConfirmed.getEntries()) {
-                    //Faz mais sentido fazer aqui, ou enviar o bloco para o LogManager?
-                    DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
-                    triggerNotification(deliverEntryNotification);
-                    System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
-                    wait(3000);
-                }
+                if (newConfirmed != null) {
 
-                if (subchains.containsKey(newConfirmed.getPreviousHash())) {
-                    List<Block> toRemove = subchains.get(newConfirmed.getPreviousHash());
-
-                    for (Block b : toRemove) {
-                        for (AppendRequest appendRequest : b.getEntries()) {
-                            if (requestsBeingUsed.contains(appendRequest)) {
-                                pendingRequests.add(appendRequest);
-                                requestsBeingUsed.remove(appendRequest);
-                            }
-                        }
+                    for (AppendRequest appendRequest : newConfirmed.getEntries()) {
+                        //Faz mais sentido fazer aqui, ou enviar o bloco para o LogManager?
+                        DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+                        triggerNotification(deliverEntryNotification);
+                        System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
+                        wait(3000);
                     }
 
-                    subchains.remove(newConfirmed.getPreviousHash());
+                    if (subchains.containsKey(newConfirmed.getPreviousHash())) {
+                        List<Block> toRemove = subchains.get(newConfirmed.getPreviousHash());
+
+                        for (Block b : toRemove) {
+                            for (AppendRequest appendRequest : b.getEntries()) {
+                                if (requestsBeingUsed.contains(appendRequest)) {
+                                    pendingRequests.add(appendRequest);
+                                    requestsBeingUsed.remove(appendRequest);
+                                }
+                            }
+                        }
+
+                        subchains.remove(newConfirmed.getPreviousHash());
+
+                    }
                 }
 
-            } else if (blockchain.alreadyLastBlock(block)) {
-                logger.info("Block already at last place in the chain");
             } else {
                 checkFork(block);
             }
@@ -261,9 +270,10 @@ public class BlockchainReplication extends GenericProtocol {
             for (List<Block> subchain : subchains.values()) {
                 if (block.getPreviousHash().equals(subchain.getLast().getHash())) {
                     subchain.add(block);
+                    System.out.println("New block on subchain: " + block.getHash());
+                    break;
                 }
             }
-            System.out.println("New block on subchain: " + block.getHash());
         }
     }
 
@@ -274,7 +284,8 @@ public class BlockchainReplication extends GenericProtocol {
                 () -> {
 
                     blockchain.addMinedBlock(newBlock);
-                    System.out.println("Block added to blockchain: " + newBlock.getHash());
+                    System.out.println("Block added to blockchain: " + newBlock.getHash() + ": " + newBlock.calculateHash());
+                    System.out.println("Block added: " + newBlock.toString());
                     broadCastBlock(newBlock);
                 },
                 () -> {

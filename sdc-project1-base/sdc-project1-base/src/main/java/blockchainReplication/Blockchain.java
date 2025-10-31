@@ -38,7 +38,7 @@ public class Blockchain {
 
     //get a block that has already been confirmed in the chain (according to the value determined in the replication protocol)
     public Block getNewValidBlock(int positionBehind) {
-        return blockchain.get(blockchain.size() - 1 - positionBehind);
+        return blockchain.size() > positionBehind + 1 ? blockchain.get(blockchain.size() - 1 - positionBehind) : null;
     }
 
     public boolean isChainValid() {
@@ -73,7 +73,7 @@ public class Blockchain {
     }
 
     public boolean isForkInit(Block block) {
-        return block.getPreviousHash().equals(blockchain.get(blockchain.size() - 2).getHash());
+        return blockchain.size() > 1 ? block.getPreviousHash().equals(blockchain.get(blockchain.size() - 2).getHash()) : false;
     }
 
     public boolean alreadyLastBlock(Block block) {
@@ -89,12 +89,17 @@ public class Blockchain {
         //validate previous hash
         if (!block.getPreviousHash().equals(getLastBlock().getHash())) {
             System.out.println("Fork: " + block.getHash());
+            System.out.println("Previous hash: " + block.getPreviousHash());
+            System.out.println("Last Block hash: " + this.getLastBlock().getHash());
+            System.out.println("Block chain: " + this.blockchain);
             return false;
         }
-        return block.getHash().equals(block.calculateHash());
+        boolean isValidHash = block.getHash().equals(block.calculateHash());
+        System.out.println("Estamos a verificar se o hash está bem feito: " + block.getHash() + ": " + block.calculateHash());
+        return isValidHash;
     }
 
-    public synchronized Block getLastBlock() {
+    public Block getLastBlock() {
         return blockchain.get(blockchain.size() - 1);
     }
 

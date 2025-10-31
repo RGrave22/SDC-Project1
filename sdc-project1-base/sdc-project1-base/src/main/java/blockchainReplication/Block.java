@@ -50,8 +50,17 @@ public class Block {
     }
 
     public String calculateHash() {
-        String dataToHash = previousHash + Long.toString(timestamp) + Integer.toString(nonce) + entries.toString();
-        return Crypto.applySha256(dataToHash);
+        StringBuilder dataToHash = new StringBuilder();
+        dataToHash.append(previousHash)
+                .append(timestamp)
+                .append(nonce);
+
+        // Adiciona todos os requestIDs das entries
+        for (AppendRequest ar : entries) {
+            dataToHash.append(ar.getRequestID().toString());
+        }
+
+        return Crypto.applySha256(dataToHash.toString());
     }
 
     public void mineBlock(int difficulty, Runnable onFinish, Runnable onCancel) {
@@ -132,7 +141,7 @@ public class Block {
 
         // Serializa e escreve diretamente
         for (AppendRequest ar : entries) {
-            byte[] serialized = AppendRequest.serialize2(ar, Unpooled.buffer());
+            byte[] serialized = AppendRequest.serialize(ar);
             buf.writeInt(serialized.length);
             buf.writeBytes(serialized);
         }
@@ -191,7 +200,6 @@ public class Block {
 
             ByteBuf entryBuf = Unpooled.wrappedBuffer(eb);
             list.add(AppendRequest.deserialize(entryBuf));
-            entryBuf.release();
         }
 
         int currentLen = buf.readInt();
@@ -217,6 +225,17 @@ public class Block {
 
     public long getTimestamp() {
         return timestamp;
+    }
+
+    @Override
+    public String toString() {
+        return "Block{"
+                + "hash='" + hash + '\''
+                + ", previousHash='" + previousHash + '\''
+                + ", timestamp=" + timestamp
+                + ", nonce=" + nonce
+                + ", entries=" + entries
+                + '}';
     }
 
 }

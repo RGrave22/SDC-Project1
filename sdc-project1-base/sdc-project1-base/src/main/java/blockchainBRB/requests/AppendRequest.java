@@ -92,25 +92,33 @@ public class AppendRequest extends ProtoRequest {
         return source;
     }
 
-    public static void serialize(AppendRequest msg, ByteBuf out) throws IOException {
+    public static byte[] serialize(AppendRequest msg) throws IOException {
+        ByteBuf out = Unpooled.buffer();
+        try {
+            out.writeLong(msg.getRequestID().getMostSignificantBits());
+            out.writeLong(msg.getRequestID().getLeastSignificantBits());
 
-        out.writeLong(msg.getRequestID().getMostSignificantBits());
-        out.writeLong(msg.getRequestID().getLeastSignificantBits());
+            byte[] clientBytes = msg.getClientID().getBytes();
+            out.writeInt(clientBytes.length);
+            out.writeBytes(clientBytes);
 
-        byte[] clientBytes = msg.getClientID().getBytes();
-        out.writeInt(clientBytes.length);
-        out.writeBytes(clientBytes);
+            Host.serializer.serialize(msg.getSource(), out);
 
-        Host.serializer.serialize(msg.source, out);
+            out.writeInt(msg.getClientRequest().length);
+            out.writeBytes(msg.getClientRequest());
 
-        out.writeInt(msg.getClientRequest().length);
-        out.writeBytes(msg.getClientRequest());
+            if (msg.getServerSignature() != null) {
+                out.writeInt(msg.getServerSignature().length);
+                out.writeBytes(msg.getServerSignature());
+            } else {
+                out.writeInt(0);
+            }
 
-        if (msg.getServerSignature() != null) {
-            out.writeInt(msg.getServerSignature().length);
-            out.writeBytes(msg.getServerSignature());
-        } else {
-            out.writeInt(0);
+            byte[] result = new byte[out.readableBytes()];
+            out.getBytes(0, result);
+            return result;
+        } finally {
+            out.release();
         }
     }
 
