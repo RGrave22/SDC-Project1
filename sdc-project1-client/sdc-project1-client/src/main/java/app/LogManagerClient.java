@@ -331,7 +331,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 			
-			System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			//System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
@@ -340,7 +340,8 @@ public class LogManagerClient {
 			clearTimeout();
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
-			
+
+			System.out.println("Client that is requesting read: " + client_name);
 			System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}

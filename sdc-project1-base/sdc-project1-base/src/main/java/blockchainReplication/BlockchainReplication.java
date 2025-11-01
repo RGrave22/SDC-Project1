@@ -47,7 +47,7 @@ public class BlockchainReplication extends GenericProtocol {
     private final List<AppendRequest> requestsBeingUsed;
 
     private final int numberOfRequestsPerBlock = 5;
-    private final int difficulty = 6; //Podemos mudar a dificuldade
+    private final int difficulty = 5; //Podemos mudar a dificuldade
     private final Blockchain blockchain;
     private boolean isMining;
     private Block currentMining;
@@ -61,8 +61,8 @@ public class BlockchainReplication extends GenericProtocol {
 
         this.blockchain = new Blockchain(difficulty);
 
-        neighbors = new HashSet<Host>();
-        publicKeys = new HashMap<Host, PublicKey>();
+        neighbors = new HashSet<>();
+        publicKeys = new HashMap<>();
 
         mySelf = null;
         this.myPublicKey = null;
@@ -231,6 +231,7 @@ public class BlockchainReplication extends GenericProtocol {
                                     requestsBeingUsed.remove(appendRequest);
                                 }
                             }
+                            System.out.println("Chain confirmed, removing subchain: " + b.getHash());
                         }
 
                         subchains.remove(newConfirmed.getPreviousHash());
@@ -277,6 +278,7 @@ public class BlockchainReplication extends GenericProtocol {
                                     requestsBeingUsed.remove(appendRequest);
                                 }
                             }
+                            System.out.println("Chain confirmed, removing subchain: " + b.getHash());
                         }
 
                         subchains.remove(newConfirmed.getPreviousHash());
@@ -301,6 +303,7 @@ public class BlockchainReplication extends GenericProtocol {
             subchains.put(block.getPreviousHash(), newSubchain);
             System.out.println("Fork identified: " + block.getHash());
         } else {
+
             for (Map.Entry<String, List<Block>> entry : subchains.entrySet()) {
                 List<Block> subchain = entry.getValue();
 
@@ -309,7 +312,7 @@ public class BlockchainReplication extends GenericProtocol {
                     System.out.println("New block on subchain: " + block.getHash());
 
                     //TODO Verificar se é suposto ser esta condição
-                    if (subchain.size() > CONFIRMATION) {
+                    if (subchain.size() >= CONFIRMATION) {
                         System.out.println("Subchain confirmed!");
                         //Ver tambem se este not valid esta bom
                         blockchain.removeNotValid(entry.getKey());
