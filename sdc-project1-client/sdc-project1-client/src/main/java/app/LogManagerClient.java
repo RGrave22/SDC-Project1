@@ -18,7 +18,6 @@ import java.security.UnrecoverableKeyException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Enumeration;
-import java.util.HashMap;
 import java.util.Properties;
 import java.util.Random;
 import java.util.UUID;
@@ -332,7 +331,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
@@ -342,7 +341,7 @@ public class LogManagerClient {
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
 			
-			//System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+			System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
 		

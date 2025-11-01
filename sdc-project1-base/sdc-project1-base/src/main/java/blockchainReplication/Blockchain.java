@@ -81,6 +81,11 @@ public class Blockchain {
     }
 
     public boolean validateBlock(Block block) {
+
+        for (Block bl : blockchain) {
+            System.out.println("Block of blockchain: " + bl.getHash());
+        }
+
         //validate block hash
         if (!block.getHash().substring(0, difficulty).equals("0".repeat(difficulty))) {
             System.out.println("Malicious block: " + block.getHash());
@@ -91,7 +96,6 @@ public class Blockchain {
             System.out.println("Fork: " + block.getHash());
             System.out.println("Previous hash: " + block.getPreviousHash());
             System.out.println("Last Block hash: " + this.getLastBlock().getHash());
-            System.out.println("Block chain: " + this.blockchain);
             return false;
         }
         boolean isValidHash = block.getHash().equals(block.calculateHash());
@@ -99,13 +103,11 @@ public class Blockchain {
         return isValidHash;
     }
 
-
-    public void removeNotValid(String hash){
-        while(blockchain.getLast().getPreviousHash().equals(hash)){
+    public void removeNotValid(String hash) {
+        while (blockchain.getLast().getPreviousHash().equals(hash)) {
             blockchain.remove(blockchain.size() - 1);
         }
     }
-
 
     public Block getLastBlock() {
         return blockchain.get(blockchain.size() - 1);

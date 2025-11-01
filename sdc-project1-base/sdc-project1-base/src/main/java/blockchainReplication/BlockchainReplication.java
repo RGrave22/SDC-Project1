@@ -101,12 +101,19 @@ public class BlockchainReplication extends GenericProtocol {
     private void onAppend(AppendRequest req, short fromProto) {
         pendingRequests.add(req);
 
+        System.out.println("Received request: " + req.getRequestID());
+
         //agreement.propose(req);
-        if (pendingRequests.size() >= numberOfRequestsPerBlock && !isMining) {
-            createBlock();
-            isMining = true;
+        if (pendingRequests.size() >= numberOfRequestsPerBlock) {
+
+            if (!isMining) {
+                createBlock();
+                isMining = true;
+            } else {
+                System.out.println("Node mining...");
+            }
         } else {
-            System.out.println("Node mining...");
+            System.out.println("Not enough requests to mine yet...");
         }
     }
 
@@ -202,6 +209,35 @@ public class BlockchainReplication extends GenericProtocol {
 
             if (blockchain.alreadyLastBlock(block)) {
                 logger.info("Block already at last place in the chain");
+                Block newConfirmed = blockchain.getNewValidBlock(CONFIRMATION);
+
+                if (newConfirmed != null) {
+
+                    for (AppendRequest appendRequest : newConfirmed.getEntries()) {
+                        //Faz mais sentido fazer aqui, ou enviar o bloco para o LogManager?
+                        DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
+                        triggerNotification(deliverEntryNotification);
+                        System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
+                        //wait(3000);
+                    }
+
+                    if (subchains.containsKey(newConfirmed.getPreviousHash())) {
+                        List<Block> toRemove = subchains.get(newConfirmed.getPreviousHash());
+
+                        for (Block b : toRemove) {
+                            for (AppendRequest appendRequest : b.getEntries()) {
+                                if (requestsBeingUsed.contains(appendRequest)) {
+                                    pendingRequests.add(appendRequest);
+                                    requestsBeingUsed.remove(appendRequest);
+                                }
+                            }
+                        }
+
+                        subchains.remove(newConfirmed.getPreviousHash());
+
+                    }
+                }
+
             } else if (blockchain.validateBlock(block)) {
 
                 if (isMining) {
@@ -228,7 +264,7 @@ public class BlockchainReplication extends GenericProtocol {
                         DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
                         triggerNotification(deliverEntryNotification);
                         System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
-                        wait(3000);
+                        //wait(3000);
                     }
 
                     if (subchains.containsKey(newConfirmed.getPreviousHash())) {
@@ -254,8 +290,6 @@ public class BlockchainReplication extends GenericProtocol {
 
         } catch (IOException e) {
             System.out.println("Error: " + e.getMessage());
-        } catch (InterruptedException e) {
-            throw new RuntimeException(e);
         }
 
     }
@@ -275,19 +309,19 @@ public class BlockchainReplication extends GenericProtocol {
                     System.out.println("New block on subchain: " + block.getHash());
 
                     //TODO Verificar se é suposto ser esta condição
-                    if(subchain.size() > CONFIRMATION){
+                    if (subchain.size() > CONFIRMATION) {
                         System.out.println("Subchain confirmed!");
                         //Ver tambem se este not valid esta bom
                         blockchain.removeNotValid(entry.getKey());
 
-                        for(Block b : subchain){
+                        for (Block b : subchain) {
                             blockchain.addMinedBlock(b);
                         }
 
                         subchains.remove(entry.getKey());
 
                         try {
-                            
+
                             Block newConfirmed = blockchain.getNewValidBlock(CONFIRMATION);
 
                             if (newConfirmed != null) {
@@ -297,11 +331,11 @@ public class BlockchainReplication extends GenericProtocol {
                                     DeliverEntryNotification deliverEntryNotification = new DeliverEntryNotification(appendRequest.getRequestID(), appendRequest.getClientID(), appendRequest.getClientRequest(), null, 0);
                                     triggerNotification(deliverEntryNotification);
                                     System.out.println("Append Request delivered to DLM: " + deliverEntryNotification.getRequestID());
-                                    wait(3000);
+                                    //wait(3000);
                                 }
 
                             }
-                        }catch (Exception e){
+                        } catch (Exception e) {
                             System.out.println("Error: " + e.getMessage());
                         }
 
@@ -325,6 +359,7 @@ public class BlockchainReplication extends GenericProtocol {
                 },
                 () -> {
                     System.out.println("Mineration was canceled!");
+                    isMining = false;
                     //logica para quando a mineração é cancelada (normalmente quando um bloco novo chega)
                 }
         );

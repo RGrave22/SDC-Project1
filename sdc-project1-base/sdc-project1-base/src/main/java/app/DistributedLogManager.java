@@ -17,13 +17,13 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import PBFT.notifications.DeliverEntryNotification;
-import blockchainBRB.requests.AppendRequest;
 import app.messages.client.AppendToLog;
 import app.messages.client.AppendToLogReply;
 import app.messages.client.LogEntry;
 import app.messages.client.ReadLogEntryReply;
 import app.messages.client.ReadLogEntryRequest;
 import app.messages.client.SubscribeToLog;
+import blockchainBRB.requests.AppendRequest;
 import common.events.ChannelAvailable;
 import common.events.NeighborUp;
 import pt.unl.fct.di.novasys.babel.core.GenericProtocol;
@@ -205,7 +205,6 @@ public class DistributedLogManager extends GenericProtocol {
 //            logger.error("Could not process a DeliverEntry notification", e);
 //        }
 //    }
-
     public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
         try {
             System.out.println("Teste1");
@@ -214,14 +213,16 @@ public class DistributedLogManager extends GenericProtocol {
             System.out.println("Teste2");
             writeToLogAndFlush(nextEntryIndex, originalRequest.generateFullLogEntry());
 
-            System.out.println("ReqId: " + not.getRequestID() + " KeySet: " +   pendingAppendRequests.keySet());
+            System.out.println("ReqId: " + not.getRequestID());
             Pair<Host, Short> info = pendingAppendRequests.remove(not.getRequestID());
 
             AppendToLogReply reply = new AppendToLogReply(originalRequest.getClientID(), nextEntryIndex);
 
-            sendMessage(clientChannel, reply, info.getRight(), info.getLeft(), 0);
+            if (info != null) {
+                sendMessage(clientChannel, reply, info.getRight(), info.getLeft(), 0);
+            }
 
-            if (subscriptions.size() > 0) {
+            if (!subscriptions.isEmpty()) {
 
                 LogEntry le = new LogEntry(nextEntryIndex, this.logEntries.get(nextEntryIndex));
                 le.signMessage(privateKey);
@@ -254,7 +255,7 @@ public class DistributedLogManager extends GenericProtocol {
     public void handleReadLogEntryRequestMessage(ReadLogEntryRequest msg, Host from, short sourceProto, int channelID) {
         try {
 
-			long index = msg.getEntryLogIndex();
+            long index = msg.getEntryLogIndex();
             if (this.logEntries.containsKey(index)) {
 
                 ReadLogEntryReply readReply = new ReadLogEntryReply(index,
