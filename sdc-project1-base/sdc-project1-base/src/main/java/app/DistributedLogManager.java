@@ -152,59 +152,7 @@ public class DistributedLogManager extends GenericProtocol {
         logger.info("[[ " + index + " ]] " + logEntry);
     }
 
-//    public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
-//        try {
-//            AppendToLog originalRequest = AppendToLog.deserializeRequest(not.getClientRequest());
-//
-//            long index = not.getSeqNo();
-//
-//            if (index != nextEntryIndex) {
-//                logger.warn("Log inconsistente! PBFT seqNo={}, nextEntryIndex={}", index, nextEntryIndex);
-//            }
-//
-//            writeToLogAndFlush(index, originalRequest.generateFullLogEntry());
-//
-//            Pair<Host, Short> info = pendingAppendRequests.remove(not.getRequestID());
-//
-//            if (info != null) {
-//
-//                AppendToLogReply reply = new AppendToLogReply(originalRequest.getClientID(), index);
-//                sendMessage(clientChannel, reply, info.getRight(), info.getLeft(), 0);
-//
-//            }
-//
-//            if (!subscriptions.isEmpty()) {
-//
-//                LogEntry le = new LogEntry(index, this.logEntries.get(index));
-//                le.signMessage(privateKey);
-//
-//                for (Entry<Host, Short> sub : subscriptions.entrySet()) {
-//                    sendMessage(clientChannel, le, sub.getValue(), sub.getKey(), 0);
-//                }
-//
-//            }
-//
-//            List<Pair<Host, Short>> pending = pendingReadRequest.remove(index);
-//
-//            if (pending != null) {
-//
-//                ReadLogEntryReply readReply = new ReadLogEntryReply(index,
-//                        this.logEntries.get(index));
-//                readReply.signMessage(privateKey);
-//
-//                for (Pair<Host, Short> p : pending) {
-//                    sendMessage(clientChannel, readReply, p.getRight(), p.getLeft(), 0);
-//                }
-//            }
-//
-//            if (index >= nextEntryIndex) {
-//                nextEntryIndex = index + 1;
-//            }
-//
-//        } catch (Exception e) {
-//            logger.error("Could not process a DeliverEntry notification", e);
-//        }
-//    }
+
     public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
         try {
             System.out.println("Teste1");

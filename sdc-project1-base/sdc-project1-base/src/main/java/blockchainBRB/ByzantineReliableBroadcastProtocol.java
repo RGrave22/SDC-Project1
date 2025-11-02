@@ -1,6 +1,5 @@
 package blockchainBRB;
 
-import app.messages.client.AppendToLog;
 import blockchainBRB.messages.BRBEchoMessage;
 import blockchainBRB.messages.BRBReadyMessage;
 import blockchainBRB.messages.BRBSendMessage;
@@ -20,7 +19,6 @@ import pt.unl.fct.di.novasys.babel.generic.signed.InvalidSerializerException;
 import pt.unl.fct.di.novasys.channel.tcp.TCPChannel;
 import pt.unl.fct.di.novasys.channel.tcp.events.*;
 import pt.unl.fct.di.novasys.network.data.Host;
-import blockchainBRB.requests.BroadcastRequest;
 import utils.Crypto;
 
 import java.io.IOException;
@@ -255,8 +253,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         if (!readyHosts.contains(sender)) {
             readyHosts.add(sender);
 
-            //System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size() + " PARA O ID: " + msg.getMessageId());
-
             int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
@@ -336,11 +332,9 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
-            // TODO IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
+
             if ((echoes.size() >= ((2 * f) + 1)) && !sentReady.get(mid)) {
-
                 try {
-
                     sentReady.put(mid, true);
 
                     BRBReadyMessage readyMsg = new BRBReadyMessage(myself, mid, payload);
@@ -353,7 +347,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                             sendMessage(readyMsg, h);
                         }
                     }
-
                     uponReceiveReadyMessage(readyMsg, myself, protoId, channel);
 
                 } catch (InvalidSerializerException | NoSuchAlgorithmException | SignatureException
@@ -372,12 +365,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
-
-        // System.out.println("KEYSET: " + publicKeys.keySet());
-
-        // System.out.println("Sender da msg: " + msg.getSender());
-        // System.out.println("mySelf: " + myself);
-        // System.out.println("sender: " + sender);
 
         if (this.publicKeys.containsKey(msg.getSender())) {
             try {
@@ -408,14 +395,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                 for (Host h : neighbors.keySet()) {
                     if (!h.equals(myself)) {
-                        //logger.info("Sent BRBEchoMessage MID={} to {}", mid, h);
-                        // System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                         sendMessage(echoMsg, h);
                     }
                 }
 
             } catch (Exception e) {
-                //logger.error("Error signing ECHO message for mid " + mid, e);
                 return;
             }
 
@@ -532,7 +516,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
                 issuedChallenges.remove(msg.getSender());
                 this.candidates.remove(msg.getSender());
                 this.neighbors.put(msg.getSender(), publicKeys.get(msg.getSender()));
-                //triggerNotification(new NeighborUp(msg.getSender(), this.neighbors.get(msg.getSender())));
             } else {
                 logger.error("Challenge was incorrectly answered by " + msg.getSender());
                 closeConnection(msg.getSender());

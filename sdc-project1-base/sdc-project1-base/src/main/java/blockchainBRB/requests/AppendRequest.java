@@ -170,7 +170,6 @@ public class AppendRequest extends ProtoRequest {
             in.readBytes(sig);
         }
 
-        //long seqno = in.readLong();
         return new AppendRequest(reqID, clientID, source, data, sig);
     }
 

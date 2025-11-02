@@ -26,12 +26,7 @@ public class Blockchain {
         System.out.println("Genesis block added: " + genesisBlock.getHash());
     }
 
-//    public void addBlock(Block newBlock) {
-//
-//        newBlock.mineBlock(difficulty);
-//        blockchain.add(newBlock);
-//    }
-    //add a new block (received from other node/miner)
+
     public void addMinedBlock(Block newBlock) {
         blockchain.add(newBlock);
     }
@@ -82,10 +77,6 @@ public class Blockchain {
 
     public boolean validateBlock(Block block) {
 
-        for (Block bl : blockchain) {
-            System.out.println("Block of blockchain: " + bl.getHash());
-        }
-
         //validate block hash
         if (!block.getHash().substring(0, difficulty).equals("0".repeat(difficulty))) {
             System.out.println("Malicious block: " + block.getHash());
@@ -99,7 +90,7 @@ public class Blockchain {
             return false;
         }
         boolean isValidHash = block.getHash().equals(block.calculateHash());
-        System.out.println("Estamos a verificar se o hash está bem feito: " + block.getHash() + ": " + block.calculateHash());
+        System.out.println("Verifying if hash is correct: " + block.getHash() + ": " + block.calculateHash());
         return isValidHash;
     }
 

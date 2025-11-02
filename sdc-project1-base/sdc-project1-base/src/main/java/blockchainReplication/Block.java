@@ -103,31 +103,6 @@ public class Block {
 
     }
 
-    public byte[] serialize2() throws IOException {
-        ByteBuf buf = Unpooled.buffer();
-
-        byte[] prev = previousHash.getBytes();
-
-        List<byte[]> blobs = new ArrayList<>(entries.size());
-        for (AppendRequest ar : entries) {
-            blobs.add(AppendRequest.serialize2(ar, buf));
-        }
-
-        buf.writeInt(prev.length);
-        buf.writeBytes(prev);
-        buf.writeLong(timestamp);
-        buf.writeInt(nonce);
-        buf.writeInt(entries.size());
-        for (byte[] eb : blobs) {
-            buf.writeInt(eb.length);
-            buf.writeBytes(eb);
-        }
-
-        byte[] out = new byte[buf.readableBytes()];
-        buf.getBytes(0, out);
-        return out;
-    }
-
     public byte[] serialize() throws IOException {
         ByteBuf buf = Unpooled.buffer();
 
@@ -154,29 +129,6 @@ public class Block {
         buf.readBytes(out);
         buf.release();
         return out;
-    }
-
-    public static Block deserialize2(byte[] data) throws IOException {
-        ByteBuf buf = Unpooled.wrappedBuffer(data);
-
-        int prevLen = buf.readInt();
-        byte[] prev = new byte[prevLen];
-        buf.readBytes(prev);
-        String previousHash = new String(prev, StandardCharsets.UTF_8);
-
-        long timestamp = buf.readLong();
-        int nonce = buf.readInt();
-
-        int n = buf.readInt();
-        List<AppendRequest> list = new ArrayList<>(n);
-        for (int i = 0; i < n; i++) {
-            int len = buf.readInt();
-            byte[] eb = new byte[len];
-            buf.readBytes(eb);
-            list.add(AppendRequest.deserialize(buf));
-        }
-
-        return new Block(previousHash, list, timestamp, nonce);
     }
 
     public static Block deserialize(byte[] data) throws IOException {
