@@ -155,10 +155,8 @@ public class DistributedLogManager extends GenericProtocol {
 
     public void handleDeliverEntryNotification(DeliverEntryNotification not, short protoID) {
         try {
-            System.out.println("Teste1");
             AppendToLog originalRequest = AppendToLog.deserializeRequest(not.getClientRequest());
 
-            System.out.println("Teste2");
             writeToLogAndFlush(nextEntryIndex, originalRequest.generateFullLogEntry());
 
             System.out.println("ReqId: " + not.getRequestID());

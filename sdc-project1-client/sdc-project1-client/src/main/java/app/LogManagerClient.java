@@ -341,8 +341,8 @@ public class LogManagerClient {
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
 
-			System.out.println("Client that is requesting read: " + client_name);
-			System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+			//System.out.println("Client that is requesting read: " + client_name);
+			//System.err.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
 		
