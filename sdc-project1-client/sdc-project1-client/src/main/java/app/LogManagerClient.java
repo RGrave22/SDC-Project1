@@ -268,7 +268,6 @@ public class LogManagerClient {
 				openConnection(servers[i], clientChannel[i]);
 			}
 
-			
 			registerTimerHandler(ExpiredOperation.TIMER_ID, this::handleExpiredOperationTimer);
 
 			this.myPrimaryChannel = clientChannel[(client_id -1) % servers.length];
@@ -291,7 +290,6 @@ public class LogManagerClient {
 			executeOperation();
 		}
 
-        //ORIGINAL
 		public void executeOperation() {
 			System.err.println(this.client_name + ": Generating new operation...");
 
@@ -321,26 +319,6 @@ public class LogManagerClient {
 			this.timeoutTimerID = setupTimer(new ExpiredOperation(currentRequest, request), operation_timeout);
 		}
 
-        //PARA TESTE
-//        public void executeOperation() {
-//            System.err.println(this.client_name + ": Generating single test operation...");
-//
-//            SignedProtoMessage request = new AppendToLog(client_name, "Test message from " + client_name);
-//            currentRequest = ((AppendToLog) request).getRequestID();
-//
-//            try {
-//                request.signMessage(key);
-//            } catch (InvalidKeyException | NoSuchAlgorithmException | SignatureException
-//                     | InvalidSerializerException e) {
-//                System.err.println(client_name + " (" + client_id + "): Unable to sign client request.");
-//                e.printStackTrace();  
-//                return;
-//            }
-//
-//            System.out.println("Sending test request to " + myPrimaryServer + " on channel " + myPrimaryChannel);
-//            sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
-//            this.startExecution = System.currentTimeMillis();
-//        }
 		
 		private void clearTimeout() {
 			if(timeoutTimerID != -1) {
@@ -350,7 +328,6 @@ public class LogManagerClient {
 		}
 		
 		public void handleAppentToLogReply(AppendToLogReply msg, Host h, short protoId, int channel) {
-            System.out.println("TESTE");
 			clearTimeout();
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);

@@ -189,8 +189,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             String msg = atL.getLogEntry();
             long timestamp = atL.getTimestamp();
 
-            System.out.println(msg);
-
             String mid = MessageIdHelper.generateUniqueID(msg, timestamp);
 
             logger.info("Received BroadcastRequest from client {}: logEntry='{}', generated MID={}",
@@ -203,7 +201,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             brbsendmsg.signMessage(privateKey);
 
             for (Host h : neighbors.keySet()) {
-                System.out.println(h);
                 sendMessage(brbsendmsg, h);
             }
 
@@ -252,8 +249,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
         if(!readyHosts.contains(sender)) {
             readyHosts.add(sender);
-
-            System.out.println("TAMANHO DO READY HOSTS: " + readyHosts.size() + " PARA O ID: " + msg.getMessageId());
 
 
             int pi = neighbors.keySet().size() + 1;
@@ -306,8 +301,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
         BRBEchoMessage msg = (BRBEchoMessage) protoMessage;
         logger.info("Received ECHO: " + msg.getPayload().toString() + "ID: " + msg.getMessageId() + "HOST: " + sender.getAddress() + ":" + sender.getPort());
 
-        System.out.println(publicKeys.keySet());
-
         if(this.publicKeys.containsKey(msg.getSender()) && !msg.getSender().equals(myself)) {
             try {
                 if (!msg.checkSignature(publicKeys.get(sender))) {
@@ -339,7 +332,7 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
             int pi = neighbors.keySet().size() + 1;
             int f = (pi - 1) / 3;
             sentReady.putIfAbsent(mid, false);
-            // TODO IMPORTANTE - mudei a formula, porque a formula que estava levava a metades (2,5) assim nao ha metades
+            //A formula foi alterada dado que da forma que estava na teorica enviava ao receber 2, e nos queriamos enviar ao receber 3
             if ((echoes.size() >= ((2*f) + 1)) && !sentReady.get(mid)) {
 
                 try {
@@ -352,7 +345,6 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                     for (Host h : neighbors.keySet()) {
                         if (!h.equals(myself)) {
-                            System.out.println("Sent READY TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                             sendMessage(readyMsg, h);
                         }
                     }
@@ -372,16 +364,10 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
     private void uponReceiveSendMessage(ProtoMessage protoMessage, Host sender, short protoId, int channel) {
         BRBSendMessage msg = (BRBSendMessage) protoMessage;
-        System.out.println("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
+        logger.info("Received SEND: " + msg.getPayload().toString() + " ID: " + msg.getMessageId() + " HOST: " + sender.getAddress() + ":" + sender.getPort());
 
         String mid = msg.getMessageId();
         byte[] payload = msg.getPayload();
-
-        System.out.println("KEYSET: " + publicKeys.keySet());
-
-        System.out.println("Sender da msg: " + msg.getSender());
-        System.out.println("mySelf: " + myself);
-        System.out.println("sender: " + sender);
 
         if(this.publicKeys.containsKey(msg.getSender())) {
             try {
@@ -412,14 +398,11 @@ public class ByzantineReliableBroadcastProtocol extends GenericProtocol {
 
                 for (Host h : neighbors.keySet()) {
                     if (!h.equals(myself)) {
-                        //logger.info("Sent BRBEchoMessage MID={} to {}", mid, h);
-                        System.out.println("Sent ECHO TO: " + h.getAddress() + ":" + h.getPort() + " ID: " + mid);
                         sendMessage(echoMsg, h);
                     }
                 }
 
             } catch (Exception e) {
-                //logger.error("Error signing ECHO message for mid " + mid, e);
                 return;
             }
 

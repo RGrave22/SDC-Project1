@@ -63,7 +63,6 @@ public class SimpleReplicationProtocol extends GenericProtocol {
         subscribeNotification(NeighborUp.NOTIFICATION_ID, this::uponNeighborUpNotification);
         subscribeNotification(NeighborDown.NOTIFICATION_ID, this::uponNeighborDownNotification);
 
-
         //lidar com o request do DLogManager
         registerRequestHandler(AppendRequest.REQUEST_ID, this::handleAppendRequest);
 
@@ -110,7 +109,6 @@ public class SimpleReplicationProtocol extends GenericProtocol {
     }
 
     public void handleDeliverNotification(DeliverBroadcastedEntryNotification notification, short sourceProto) {
-//        logger.info("Delivered entry via BRB: UUID={} from sender={}", notification.getRequestID(), notification.getClientID());
 
         try {
             BroadcastRequest br = BroadcastRequest.deserialize(notification.getClientRequest());
