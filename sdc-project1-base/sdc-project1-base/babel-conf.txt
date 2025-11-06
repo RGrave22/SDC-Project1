@@ -1,7 +1,7 @@
 ## Configuration file for the SDC example on lab 1
 
 # Distributed Log Manager
-address 127.0.0.1
+## address 127.0.0.1
 
 #server_port 5001 - this one is different for each process on the same machine and you must provide
 
@@ -13,7 +13,7 @@ address 127.0.0.1
 ##membership.neighbors 127.0.0.1:5000,127.0.0.1:6000,127.0.0.1:7000,127.0.0.1:8000
 
 ## brb.myhost - this one is different for each process and you must provide
-brb.neighbors 127.0.0.1:5000,127.0.0.1:6000,127.0.0.1:7000,127.0.0.1:8000
+brb.neighbors 172.30.10.106:5000,172.30.10.107:6000,172.30.10.108:7000,172.30.10.115:8000
 
 
 # Crypto configuration parameters
