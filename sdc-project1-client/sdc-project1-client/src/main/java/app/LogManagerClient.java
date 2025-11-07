@@ -291,7 +291,7 @@ public class LogManagerClient {
 		}
 
 		public void executeOperation() {
-			System.err.println(this.client_name + ": Generating new operation...");
+			//System.err.println(this.client_name + ": Generating new operation...");
 
 			SignedProtoMessage request = null;
 
@@ -312,7 +312,7 @@ public class LogManagerClient {
 				return;
 			}
 
-			System.out.println("Sending request of type " + request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " + myPrimaryChannel);
+			//System.out.println("Sending request of type " + request.getClass().getCanonicalName() + " to " + myPrimaryServer + " on " + myPrimaryChannel);
 			sendMessage(myPrimaryChannel, request, application_proto_number, myPrimaryServer, 0);
 			this.startExecution = System.currentTimeMillis();
 
@@ -332,7 +332,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 			
-			System.out.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			//System.out.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
