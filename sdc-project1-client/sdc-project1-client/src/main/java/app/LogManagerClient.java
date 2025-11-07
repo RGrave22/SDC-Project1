@@ -290,7 +290,7 @@ public class LogManagerClient {
 		}
 
 		public void executeOperation() {
-			System.err.println(this.client_name + ": Generating new operation...");
+			//System.err.println(this.client_name + ": Generating new operation...");
 
 			SignedProtoMessage request = null;
 
@@ -336,7 +336,7 @@ public class LogManagerClient {
 			m.measure(APPEND_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(APPEND_OP_ID, Status.SUCCESS);
 
-			System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
+			//System.err.println("Received reply to append operation with index: " + msg.getEntryLogIndex());
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getEntryLogIndex());
 			executeOperation();
 		}
@@ -346,16 +346,16 @@ public class LogManagerClient {
 			m.measure(READ_OP_ID, (int) (System.currentTimeMillis() - this.startExecution));
 			m.reportStatus(READ_OP_ID, Status.SUCCESS);
 
-			System.err
-					.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
+			//System.err
+			//		.println("Received reply to read operation for index " + msg.getEntryLogIndex() + ": " + msg.getLogEntry());
 			executeOperation();
 		}
 
 		public void handleLogEntry(LogEntry msg, Host h, short protoId, int channel) {
 			clearTimeout();
 
-			System.err
-					.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
+			//System.err
+			//		.println("Received a new log entry with index " + msg.getIndex() + " and contents: " + msg.getLogEntry());
 
 			this.lastEntryObserved = Math.max(this.lastEntryObserved, msg.getIndex());
 		}
