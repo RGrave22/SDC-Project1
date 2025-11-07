@@ -297,8 +297,8 @@ public class LogManagerClient {
 			if (r.nextFloat() <= LogManagerClient.probability_to_read) {
 				request = new ReadLogEntryRequest(client_name,
 						this.lastEntryObserved >= 1 ? r.nextInt((int) this.lastEntryObserved) : 1);
-				System.err.println(this.client_name + ": Generating new operation with read request for index "
-						+ ((ReadLogEntryRequest) request).getEntryLogIndex());
+//				System.err.println(this.client_name + ": Generating new operation with read request for index "
+//						+ ((ReadLogEntryRequest) request).getEntryLogIndex());
 				currentRequest = ((ReadLogEntryRequest) request).getRequestID();
 			} else {
 				request = new AppendToLog(client_name,
