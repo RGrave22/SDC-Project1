@@ -1,11 +1,11 @@
 ## Configuration file for the SDC project 1 base
 
-address 127.0.0.1
+## address 127.0.0.1
 initial_port 10000
 clients 12
 server_proto 500
 operation_timeout 1000
 key_store clients.ks
 key_store_password password
-server_list 127.0.0.1:5100,127.0.0.1:6100,127.0.0.1:7100,127.0.0.1:8100,127.0.0.1:9100
+server_list 172.30.10.106:5100,172.30.10.107:6100,172.30.10.108:7100,172.30.10.115:8100,172.30.10.116:9100
 report_period 10000
